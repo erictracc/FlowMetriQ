@@ -1,14 +1,20 @@
 import dash
-from dash import html, dcc
+from dash import html, dcc, callback, Output, Input
 from flask import session
 
-dash.register_page(__name__, path="/logout")
+dash.register_page(__name__, path="/logout", title="Logout")
 
 layout = html.Div([
-    html.H2("Logging out...")
+    dcc.Location(id="logout-trigger"),
+    dcc.Location(id="logout-redirect")
 ])
 
-@app.callback(Output("dummy", "children"), Input("dummy", "id"))
-def _logout(_):
-    session.pop("logged_in", None)
-    return dcc.Location(href="/")
+
+@callback(
+    Output("logout-redirect", "pathname"),
+    Input("logout-trigger", "pathname"),
+    prevent_initial_call=False
+)
+def logout_user(_):
+    session.clear()
+    return "/login"

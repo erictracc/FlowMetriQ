@@ -2,7 +2,7 @@ import dash
 from dash import html, dcc
 from flask import session
 
-dash.register_page(__name__, path="/dashboard")
+dash.register_page(__name__, path="/home", title="Home")
 
 layout = html.Div([
     html.H1("Welcome to the Dashboard"),
