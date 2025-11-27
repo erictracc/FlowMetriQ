@@ -1,21 +1,15 @@
-from dash import Dash, html, dcc, page_container
+from dash import Dash, html, dcc
 import dash
 from flask import session, redirect, request
 from config_manager import load_settings
+from auth import check_credentials
 
 # ---------------------------------------------------------
-# Load server settings (host, port, db later, etc.)
+# Load server settings
 # ---------------------------------------------------------
 settings = load_settings()
 HOST = settings.get("host", "127.0.0.1")
 PORT = settings.get("port", 8050)
-
-# ---------------------------------------------------------
-# Hard-coded login credentials for now
-# (You can move these into settings.json later)
-# ---------------------------------------------------------
-VALID_USERNAME = "admin"
-VALID_PASSWORD = "flowmetriq"
 
 # ---------------------------------------------------------
 # Dash + Flask Setup
@@ -27,40 +21,48 @@ app = Dash(
 )
 
 server = app.server
-server.secret_key = "H39as98jhASD987nasd798ASDa98s7dASDV"   # IMPORTANT
+server.secret_key = "H39as98jhASD987nasd798ASDa98s7dASDV"  # IMPORTANT
 
-# ---------------------------------------------------------
-# Root layout
-# ---------------------------------------------------------
-app.layout = html.Div([
-    dcc.Location(id="url"),
-    page_container
-])
 
 # ---------------------------------------------------------
 # Authentication Guard
 # ---------------------------------------------------------
-PUBLIC_ROUTES = {"/", "/login", "/_dash-update-component", "/_dash-layout"}
+PUBLIC_PATHS = {
+    "/",
+    "/login",
+    "/_dash-layout",
+    "/_dash-dependencies",
+    "/_dash-update-component",
+}
 
 @server.before_request
-def protect_pages():
+def enforce_login():
     path = request.path
 
-    # allow public pages
-    if path in PUBLIC_ROUTES or path.startswith("/assets"):
+    # allow public routes
+    if path in PUBLIC_PATHS or path.startswith("/assets"):
         return
 
-    # block everything else unless logged in
+    # Dash pages go under /<page_name>
+    # so allow the login page fully
+    if path == "/login":
+        return
+
+    # Logged in?
     if not session.get("logged_in"):
         return redirect("/login")
 
 
 # ---------------------------------------------------------
-# Helper function used by login page
+# Main App Layout: Must be a function for session-aware routing
 # ---------------------------------------------------------
-def check_credentials(username, password):
-    return username == VALID_USERNAME and password == VALID_PASSWORD
+def serve_layout():
+    return html.Div([
+        dcc.Location(id="url"),
+        dash.page_container
+    ])
 
+app.layout = serve_layout
 
 # ---------------------------------------------------------
 # Run App
