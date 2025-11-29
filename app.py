@@ -3,6 +3,7 @@ import dash
 from flask import session, redirect, request
 from config_manager import load_settings
 from auth import check_credentials
+from components.navbar import navbar
 
 # ---------------------------------------------------------
 # Load server settings
@@ -43,26 +44,48 @@ def enforce_login():
     if path in PUBLIC_PATHS or path.startswith("/assets"):
         return
 
-    # Dash pages go under /<page_name>
-    # so allow the login page fully
+    # allow login page
     if path == "/login":
         return
 
-    # Logged in?
+    # enforce login for all others
     if not session.get("logged_in"):
         return redirect("/login")
 
 
 # ---------------------------------------------------------
-# Main App Layout: Must be a function for session-aware routing
+# Main App Layout (dynamic for session-aware navbar)
 # ---------------------------------------------------------
 def serve_layout():
-    return html.Div([
-        dcc.Location(id="url"),
-        dash.page_container
-    ])
+    from flask import session
+
+    # Always include the global stores
+    stores = [
+        dcc.Store(id="global-log-store", storage_type="session"),
+        dcc.Store(id="global-log-name", storage_type="session"),
+    ]
+
+    # If NOT logged in: no navbar, just the pages (login / front)
+    if not session.get("logged_in"):
+        return html.Div(
+            stores + [
+                dcc.Location(id="url"),
+                dash.page_container
+            ]
+        )
+
+    # If logged in: add navbar + pages
+    return html.Div(
+        stores + [
+            navbar(),
+            dcc.Location(id="url"),
+            html.Div(dash.page_container, style={"padding": "20px"})
+        ]
+    )
+
 
 app.layout = serve_layout
+
 
 # ---------------------------------------------------------
 # Run App
