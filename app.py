@@ -24,6 +24,18 @@ app = Dash(
 server = app.server
 server.secret_key = "H39as98jhASD987nasd798ASDa98s7dASDV"  # IMPORTANT
 
+# ---------------------------------------------------------
+# Global Server-Side Log Store
+# ---------------------------------------------------------
+server.LOG_STORE = {}
+
+# ---------------------------------------------------------
+# SESSION-PERSISTENT GLOBAL STORES (created ONCE)
+# ---------------------------------------------------------
+global_stores = html.Div([
+    dcc.Store(id="global-log-store", storage_type="session"),
+    dcc.Store(id="global-log-name", storage_type="session"),
+])
 
 # ---------------------------------------------------------
 # Authentication Guard
@@ -40,52 +52,41 @@ PUBLIC_PATHS = {
 def enforce_login():
     path = request.path
 
-    # allow public routes
+    # Allow public routes
     if path in PUBLIC_PATHS or path.startswith("/assets"):
         return
 
-    # allow login page
+    # Allow login page
     if path == "/login":
         return
 
-    # enforce login for all others
+    # Block everything else unless logged in
     if not session.get("logged_in"):
         return redirect("/login")
 
-
 # ---------------------------------------------------------
-# Main App Layout (dynamic for session-aware navbar)
+# Dynamic Layout (session-aware)
 # ---------------------------------------------------------
 def serve_layout():
     from flask import session
 
-    # Always include the global stores
-    stores = [
-        dcc.Store(id="global-log-store", storage_type="session"),
-        dcc.Store(id="global-log-name", storage_type="session"),
-    ]
-
-    # If NOT logged in: no navbar, just the pages (login / front)
+    # Not logged in → no navbar
     if not session.get("logged_in"):
-        return html.Div(
-            stores + [
-                dcc.Location(id="url"),
-                dash.page_container
-            ]
-        )
-
-    # If logged in: add navbar + pages
-    return html.Div(
-        stores + [
-            navbar(),
+        return html.Div([
+            global_stores,
             dcc.Location(id="url"),
-            html.Div(dash.page_container, style={"padding": "20px"})
-        ]
-    )
+            dash.page_container
+        ])
 
+    # Logged in → show navbar + pages
+    return html.Div([
+        global_stores,
+        navbar(),
+        dcc.Location(id="url"),
+        html.Div(dash.page_container, style={"padding": "20px"}),
+    ])
 
 app.layout = serve_layout
-
 
 # ---------------------------------------------------------
 # Run App

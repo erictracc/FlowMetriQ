@@ -3,12 +3,14 @@ from dash import html, dcc, callback, Input, Output, State
 import pandas as pd
 import base64
 import io
-from flask import current_app as server
 import dash_cytoscape as cyto
+from flask import current_app as server
+import uuid
 
 cyto.load_extra_layouts()
 
 dash.register_page(__name__, path="/home", title="Dashboard")
+
 
 # ---------------------------------------------------------
 # Helper: Compute DFG
@@ -175,7 +177,7 @@ layout = html.Div(
                             options=[],
                             placeholder="Select loaded log",
                             style={"width": "250px"},
-                        ),       
+                        ),
                     ],
                 ),
 
@@ -243,33 +245,43 @@ layout = html.Div(
 
 
 # ---------------------------------------------------------
-# Upload handler
+# Upload handler → save DF in server.LOG_STORE and ID in global store
 # ---------------------------------------------------------
 @callback(
     Output("home-upload-status", "children"),
+    Output("global-log-store", "data"),   # will contain log_id (string)
     Output("global-log-name", "data"),
     Input("upload-log-home", "contents"),
     State("upload-log-home", "filename"),
 )
 def handle_upload(contents, filename):
     if contents is None:
-        return "", None
+        return "", None, None
 
     try:
         decoded = base64.b64decode(contents.split(",")[1]).decode("utf-8")
         df = pd.read_csv(io.StringIO(decoded))
 
-        server.config["log_df"] = df
-        server.config["log_name"] = filename
+        # Ensure LOG_STORE exists on the Flask server
+        if not hasattr(server, "LOG_STORE"):
+            server.LOG_STORE = {}
 
-        return f"Uploaded file: {filename}", filename
+        # Generate a unique ID for this log and store DF server-side
+        log_id = str(uuid.uuid4())
+        server.LOG_STORE[log_id] = df
+
+        return (
+            f"Uploaded file: {filename}",
+            log_id,    # tiny string in browser
+            filename
+        )
 
     except Exception as e:
-        return f"Upload failed: {str(e)}", None
+        return f"Upload failed: {str(e)}", None, None
 
 
 # ---------------------------------------------------------
-# Dropdown update
+# Dropdown update for log selector
 # ---------------------------------------------------------
 @callback(
     Output("log-selector", "options"),
@@ -287,13 +299,21 @@ def update_dropdown(filename):
 # ---------------------------------------------------------
 @callback(
     Output("filter-paths", "options"),
-    Input("global-log-name", "data")
+    Input("global-log-store", "data"),
 )
-def populate_filter_paths(filename):
-    df = server.config.get("log_df")
+def populate_filter_paths(log_id):
+    if not log_id:
+        return []
+
+    # Retrieve DF from server.LOG_STORE
+    df = getattr(server, "LOG_STORE", {}).get(log_id)
     if df is None:
         return []
 
+    if "EVENT" not in df.columns:
+        return []
+
+    df = df.copy()
     df["ABSTRACT"] = df["EVENT"]
     dfg = compute_dfg(df, "ABSTRACT")
 
@@ -308,19 +328,25 @@ def populate_filter_paths(filename):
 # ---------------------------------------------------------
 @callback(
     Output("dfg-graph", "elements"),
-    Input("log-selector", "value"),
+    Input("global-log-store", "data"),
     Input("event-abstraction", "value"),
     Input("min-frequency", "value"),
     Input("top-variants", "value"),
     Input("filter-paths", "value"),
     Input("refresh-graph", "n_clicks"),
 )
-def update_dfg(selected_log, activity_type, min_freq, top_variants, filter_paths, refresh):
-    df = server.config.get("log_df")
+def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refresh):
+    if not log_id:
+        return []
+
+    # Retrieve DF from server.LOG_STORE
+    df = getattr(server, "LOG_STORE", {}).get(log_id)
     if df is None:
         return []
 
-    # fallback
+    df = df.copy()
+
+    # Fallback if abstraction column missing
     if activity_type not in df.columns:
         activity_type = "EVENT"
 
@@ -348,10 +374,10 @@ def update_dfg(selected_log, activity_type, min_freq, top_variants, filter_paths
     # ---- Compute DFG ----
     dfg = compute_dfg(df, "ABSTRACT")
 
-    # minimum frequency filter
+    # Minimum frequency filter
     dfg = {k: v for k, v in dfg.items() if v >= min_freq}
 
-    # filter paths
+    # Filter paths
     if filter_paths:
         allowed = {tuple(fp.split("|")) for fp in filter_paths}
         dfg = {k: v for k, v in dfg.items() if k in allowed}
