@@ -4,6 +4,8 @@ from flask import session, redirect, request
 from config_manager import load_settings
 from auth import check_credentials
 from components.navbar import navbar
+from db.mongo import get_db
+from db.collections import ensure_collections
 
 # ---------------------------------------------------------
 # Load server settings
@@ -22,12 +24,7 @@ app = Dash(
 )
 
 server = app.server
-server.secret_key = "H39as98jhASD987nasd798ASDa98s7dASDV"  # IMPORTANT
-
-# ---------------------------------------------------------
-# Global Server-Side Log Store
-# ---------------------------------------------------------
-server.LOG_STORE = {}
+server.secret_key = "H39as98jhASD987nasd798ASDa98s7dASDV"  # important
 
 # ---------------------------------------------------------
 # SESSION-PERSISTENT GLOBAL STORES (created ONCE)
@@ -36,6 +33,23 @@ global_stores = html.Div([
     dcc.Store(id="global-log-store", storage_type="session"),
     dcc.Store(id="global-log-name", storage_type="session"),
 ])
+
+# ---------------------------------------------------------
+# MONGO INITIALIZATION — run ONCE per process
+# ---------------------------------------------------------
+if not hasattr(server, "_mongo_initialized"):
+    try:
+        db = get_db()
+        server.db = db
+        print(f"[MongoDB] Connected → {settings['database_uri']} / {settings['database_name']}")
+
+        ensure_collections(db)
+        print("[MongoDB] Collections Verified")
+
+        server._mongo_initialized = True  # prevents accidental re-runs
+    except Exception as e:
+        print("[MongoDB] ERROR:", str(e))
+        server.db = None
 
 # ---------------------------------------------------------
 # Authentication Guard
@@ -51,16 +65,16 @@ PUBLIC_PATHS = {
 @server.before_request
 def enforce_login():
     path = request.path
-
-    # Allow public routes
-    if path in PUBLIC_PATHS or path.startswith("/assets"):
+    if path.startswith("/_dash"):
         return
-
-    # Allow login page
+    if path.startswith("/assets"):
+        return
+    if path == "/favicon.ico" or path == "/_favicon.ico":
+        return
     if path == "/login":
         return
-
-    # Block everything else unless logged in
+    if path == "/":
+        return
     if not session.get("logged_in"):
         return redirect("/login")
 
@@ -68,17 +82,15 @@ def enforce_login():
 # Dynamic Layout (session-aware)
 # ---------------------------------------------------------
 def serve_layout():
-    from flask import session
+    from flask import session as flask_session
 
-    # Not logged in → no navbar
-    if not session.get("logged_in"):
+    if not flask_session.get("logged_in"):
         return html.Div([
             global_stores,
             dcc.Location(id="url"),
             dash.page_container
         ])
 
-    # Logged in → show navbar + pages
     return html.Div([
         global_stores,
         navbar(),
@@ -95,5 +107,6 @@ if __name__ == "__main__":
     app.run(
         host=HOST,
         port=PORT,
-        debug=True
+        debug=True,
+        use_reloader=False  # prevents double-execution and WinError 10038
     )
