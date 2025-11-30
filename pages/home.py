@@ -5,27 +5,14 @@ import base64
 import io
 import dash_cytoscape as cyto
 from flask import current_app as server
-import uuid
 from bson import ObjectId
+
+# Import DFG helpers from service layer
+from services.dfg_service import compute_dfg, compute_dfg_graph
 
 cyto.load_extra_layouts()
 
 dash.register_page(__name__, path="/home", title="Dashboard")
-
-# ==========================================================
-# Helper: Compute Directly-Follows Graph
-# ==========================================================
-def compute_dfg(df, activity_col):
-    dfg = {}
-    df_sorted = df.sort_values(by=["CASE ID", "START TIME"])
-
-    for case, group in df_sorted.groupby("CASE ID"):
-        events = list(group[activity_col])
-        for i in range(len(events) - 1):
-            pair = (events[i], events[i + 1])
-            dfg[pair] = dfg.get(pair, 0) + 1
-
-    return dfg
 
 
 # ==========================================================
@@ -393,9 +380,8 @@ def populate_filter_paths(log_id):
     if df is None or "EVENT" not in df.columns:
         return []
 
-    df = df.copy()
-    df["ABSTRACT"] = df["EVENT"]
-    dfg = compute_dfg(df, "ABSTRACT")
+    # Use the service-layer DFG helper directly on EVENT
+    dfg = compute_dfg(df, "EVENT")
 
     return [{"label": f"{a} → {b}", "value": f"{a}|{b}"} for (a, b) in dfg.keys()]
 
@@ -422,14 +408,17 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
 
     df = df.copy()
 
-    if activity_type not in df.columns:
-        activity_type = "EVENT"
-
-    df["ABSTRACT"] = df[activity_type]
-
-    # --- Top Variants ---
+    # ---------- Top Variants (same behavior as before) ----------
+    top_variant_cases = None
     if top_variants != "none":
         k = int(top_variants)
+
+        # Use the current abstraction when defining traces
+        if activity_type in df.columns:
+            df["ABSTRACT"] = df[activity_type]
+        else:
+            df["ABSTRACT"] = df["EVENT"]
+
         traces = (
             df.groupby("CASE ID")["ABSTRACT"]
             .apply(list)
@@ -437,31 +426,19 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
         )
         top_traces = traces.head(k).index.tolist()
 
-        allowed = [
+        top_variant_cases = [
             cid for cid, grp in df.groupby("CASE ID")
             if grp["ABSTRACT"].tolist() in top_traces
         ]
-        df = df[df["CASE ID"].isin(allowed)]
 
-    # --- Compute DFG ---
-    dfg = compute_dfg(df, "ABSTRACT")
-    dfg = {k: v for k, v in dfg.items() if v >= min_freq}
-
-    if filter_paths:
-        allowed_paths = {tuple(fp.split("|")) for fp in filter_paths}
-        dfg = {k: v for k, v in dfg.items() if k in allowed_paths}
-
-    # --- Build Graph ---
-    nodes = {}
-    edges = []
-
-    for (a, b), weight in dfg.items():
-        nodes[a] = True
-        nodes[b] = True
-        edges.append({"data": {"source": a, "target": b, "weight": weight}})
-
-    node_elements = [{"data": {"id": n, "label": n}} for n in nodes]
-    return node_elements + edges
+    # ---------- Delegate DFG + filtering to service ----------
+    return compute_dfg_graph(
+        df=df,
+        activity_type=activity_type,
+        min_freq=min_freq,
+        top_variant_cases=top_variant_cases,
+        filter_paths=filter_paths,
+    )
 
 
 # ==========================================================
@@ -472,6 +449,7 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
     Input("dfg-zoom", "value")
 )
 def update_zoom(val):
+    # direct mapping slider → cytoscape zoom
     return val
 
 
