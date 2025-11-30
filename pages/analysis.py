@@ -7,6 +7,12 @@ import plotly.graph_objects as go
 # SERVICES
 from services.log_service import load_df, list_logs
 from services.bottleneck_service import compute_bottlenecks
+from services.graph_service import (
+    event_frequency_bar,
+    duration_distribution,
+    duration_boxplot,
+    event_timeseries,
+)
 
 dash.register_page(__name__, path="/analysis", title="Process Analysis")
 
@@ -206,6 +212,15 @@ layout = html.Div(
 
         html.H3("Case Timeline"),
         dcc.Graph(id="case-timeline"),
+
+        html.Hr(style={"margin": "40px 0"}),
+        html.H3("Additional Visual Insights"),
+
+        dcc.Graph(id="graph-event-frequency"),
+        dcc.Graph(id="graph-duration-dist"),
+        dcc.Graph(id="graph-duration-box"),
+        dcc.Graph(id="graph-timeseries"),
+
     ],
 )
 
@@ -432,3 +447,54 @@ def show_case_timeline(_, log_id, case_id, event_filter, start_date, end_date):
     )
 
     return fig
+
+# for additional visual insights
+@callback(
+    Output("graph-event-frequency", "figure"),
+    Output("graph-duration-dist", "figure"),
+    Output("graph-duration-box", "figure"),
+    Output("graph-timeseries", "figure"),
+    Input("run-analysis", "n_clicks"),
+    State("analysis-log-selector", "value"),
+    State("case-selector", "value"),
+    State("event-filter", "value"),
+    State("date-range-filter", "start_date"),
+    State("date-range-filter", "end_date"),
+    prevent_initial_call=True,
+)
+def update_graphs(_, log_id, case_id, event_filter, start_date, end_date):
+
+    # safety
+    if not log_id:
+        return go.Figure(), go.Figure(), go.Figure(), go.Figure()
+
+    df = preprocess(load_df(log_id))
+    if df.empty:
+        return go.Figure(), go.Figure(), go.Figure(), go.Figure()
+
+    # Apply SAME filters as main analysis
+    filtered = df.copy()
+
+    if event_filter:
+        filtered = filtered[filtered["EVENT"].isin(event_filter)]
+
+    if case_id:
+        filtered = filtered[filtered["CASE ID"] == str(case_id)]
+
+    if start_date and end_date:
+        start_ts, end_ts = pd.to_datetime(start_date), pd.to_datetime(end_date)
+        filtered = filtered[
+            (filtered["START TIME"] >= start_ts) &
+            (filtered["START TIME"] <= end_ts)
+        ]
+
+    if filtered.empty:
+        return go.Figure(), go.Figure(), go.Figure(), go.Figure()
+
+    # Generate graphs
+    return (
+        event_frequency_bar(filtered),
+        duration_distribution(filtered),
+        duration_boxplot(filtered),
+        event_timeseries(filtered),
+    )
