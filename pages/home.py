@@ -1,20 +1,20 @@
 import dash
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, callback, Input, Output, State, no_update
 import pandas as pd
 import base64
 import io
 import dash_cytoscape as cyto
 from flask import current_app as server
 import uuid
+from bson import ObjectId
 
 cyto.load_extra_layouts()
 
 dash.register_page(__name__, path="/home", title="Dashboard")
 
-
-# ---------------------------------------------------------
-# Helper: Compute DFG
-# ---------------------------------------------------------
+# ==========================================================
+# Helper: Compute Directly-Follows Graph
+# ==========================================================
 def compute_dfg(df, activity_col):
     dfg = {}
     df_sorted = df.sort_values(by=["CASE ID", "START TIME"])
@@ -28,14 +28,40 @@ def compute_dfg(df, activity_col):
     return dfg
 
 
-# ---------------------------------------------------------
+# ==========================================================
+# Helper: Load DF from memory → or fallback from MongoDB
+# ==========================================================
+def load_df(log_id):
+    # Check server cache first
+    if hasattr(server, "LOG_STORE") and log_id in server.LOG_STORE:
+        return server.LOG_STORE[log_id]
+
+    # If not cached: load from MongoDB
+    db = server.db
+    doc = db.event_logs.find_one({"_id": ObjectId(log_id)})
+    if doc:
+        df = pd.DataFrame(doc["events"])
+
+        # Re-cache for fast DFG interactions
+        if not hasattr(server, "LOG_STORE"):
+            server.LOG_STORE = {}
+        server.LOG_STORE[log_id] = df
+
+        return df
+
+    return None
+
+
+# ==========================================================
 # PAGE LAYOUT
-# ---------------------------------------------------------
+# ==========================================================
 layout = html.Div(
     style={"display": "flex", "fontFamily": "Arial", "height": "100vh"},
     children=[
 
+        # ==========================
         # LEFT SIDEBAR
+        # ==========================
         html.Div(
             style={
                 "width": "270px",
@@ -68,11 +94,11 @@ layout = html.Div(
 
                 html.Hr(),
 
+                # Upload section
                 html.Label("Upload Event Log"),
                 dcc.Upload(
                     id="upload-log-home",
-                    children=html.Div("Drag & Drop or Click",
-                                      style={"textAlign": "center"}),
+                    children=html.Div("Drag & Drop or Click", style={"textAlign": "center"}),
                     multiple=False,
                     style={
                         "width": "100%",
@@ -111,7 +137,7 @@ layout = html.Div(
                     min=1,
                     max=50,
                     step=1,
-                    value=1,
+                    value=10,
                     tooltip={"placement": "bottom"},
                     marks={i: str(i) for i in [1, 10, 20, 30, 40, 50]},
                 ),
@@ -126,28 +152,57 @@ layout = html.Div(
                         {"label": "Top 5 variants", "value": 5},
                         {"label": "Top 10 variants", "value": 10},
                     ],
-                    value="none",
+                    value=3,
                     style={"marginBottom": "30px"},
                 ),
 
                 html.Label("Zoom"),
                 dcc.Slider(
                     id="dfg-zoom",
-                    min=0.2,
-                    max=2.5,
-                    step=0.1,
-                    value=1.0,
+                    min=0,
+                    max=3,
+                    step=0.5,
+                    value=1,
                     tooltip={"placement": "bottom"},
-                    marks={},   # REMOVE SCALE LABELS
+                    marks={},   # no labels
                 ),
+
+                html.Div(style={"marginBottom": "30px"}),
+
+                html.Hr(),
+
+                # =============================
+                # DELETE BUTTON
+                # =============================
+                html.Button(
+                    "Delete Selected Log",
+                    id="delete-log-btn",
+                    n_clicks=0,
+                    style={
+                        "width": "100%",
+                        "padding": "10px",
+                        "backgroundColor": "#C62828",
+                        "color": "white",
+                        "border": "none",
+                        "borderRadius": "6px",
+                        "cursor": "pointer",
+                        "marginTop": "20px",
+                    },
+                    disabled=True,
+                ),
+
+                html.Div(id="delete-status", style={"marginTop": "10px", "color": "#C62828"}),
             ],
         ),
 
+        # ==========================
         # MAIN CONTENT
+        # ==========================
         html.Div(
             style={"flex": 1, "padding": "20px"},
             children=[
 
+                # TOP BAR
                 html.Div(
                     style={
                         "display": "flex",
@@ -172,6 +227,7 @@ layout = html.Div(
                             },
                         ),
 
+                        # Select previously uploaded logs from Mongo
                         dcc.Dropdown(
                             id="log-selector",
                             options=[],
@@ -181,13 +237,13 @@ layout = html.Div(
                     ],
                 ),
 
+                # Graph
                 cyto.Cytoscape(
                     id="dfg-graph",
                     responsive=True,
                     minZoom=0.2,
                     maxZoom=2.5,
                     userZoomingEnabled=True,
-
                     layout={
                         "name": "dagre",
                         "rankDir": "TB",
@@ -195,13 +251,11 @@ layout = html.Div(
                         "fit": False,
                         "padding": 0
                     },
-
                     style={
                         "width": "100%",
                         "height": "calc(100vh - 180px)",
                         "backgroundColor": "white",
                     },
-
                     elements=[],
                     stylesheet=[
                         {
@@ -244,12 +298,12 @@ layout = html.Div(
 )
 
 
-# ---------------------------------------------------------
-# Upload handler → save DF in server.LOG_STORE and ID in global store
-# ---------------------------------------------------------
+# ==========================================================
+# Upload Log → Save to Mongo + Cache locally
+# ==========================================================
 @callback(
     Output("home-upload-status", "children"),
-    Output("global-log-store", "data"),   # will contain log_id (string)
+    Output("global-log-store", "data"),
     Output("global-log-name", "data"),
     Input("upload-log-home", "contents"),
     State("upload-log-home", "filename"),
@@ -259,44 +313,74 @@ def handle_upload(contents, filename):
         return "", None, None
 
     try:
-        decoded = base64.b64decode(contents.split(",")[1]).decode("utf-8")
-        df = pd.read_csv(io.StringIO(decoded))
+        data = base64.b64decode(contents.split(",")[1]).decode("utf-8")
+        df = pd.read_csv(io.StringIO(data))
 
-        # Ensure LOG_STORE exists on the Flask server
+        # Save to MongoDB
+        db = server.db
+        log_doc = {
+            "filename": filename,
+            "columns": list(df.columns),
+            "n_events": len(df),
+            "n_cases": df["CASE ID"].nunique() if "CASE ID" in df else None,
+            "events": df.to_dict("records"),
+        }
+        inserted = db.event_logs.insert_one(log_doc)
+        log_id = str(inserted.inserted_id)
+
+        # Cache in memory
         if not hasattr(server, "LOG_STORE"):
             server.LOG_STORE = {}
-
-        # Generate a unique ID for this log and store DF server-side
-        log_id = str(uuid.uuid4())
         server.LOG_STORE[log_id] = df
 
-        return (
-            f"Uploaded file: {filename}",
-            log_id,    # tiny string in browser
-            filename
-        )
+        return f"Uploaded file: {filename}", log_id, filename
 
     except Exception as e:
         return f"Upload failed: {str(e)}", None, None
 
 
-# ---------------------------------------------------------
-# Dropdown update for log selector
-# ---------------------------------------------------------
+# ==========================================================
+# Populate dropdown with ALL Mongo logs on page load
+# ==========================================================
 @callback(
     Output("log-selector", "options"),
-    Output("log-selector", "value"),
-    Input("global-log-name", "data"),
+    Input("url", "pathname"),
 )
-def update_dropdown(filename):
-    if filename is None:
-        return [], None
-    return [{"label": filename, "value": filename}], filename
+def populate_log_dropdown(_):
+    db = server.db
+    logs = list(db.event_logs.find({}, {"filename": 1}))
+    return [{"label": log["filename"], "value": str(log["_id"])} for log in logs]
 
 
-# ---------------------------------------------------------
+# ==========================================================
+# Selecting a log reloads it from Mongo into global stores
+# + enables delete button
+# ==========================================================
+@callback(
+    Output("global-log-store", "data", allow_duplicate=True),
+    Output("global-log-name", "data", allow_duplicate=True),
+    Output("delete-log-btn", "disabled", allow_duplicate=True),
+    Input("log-selector", "value"),
+    prevent_initial_call=True,
+)
+def load_selected_log(log_id):
+    if not log_id:
+        return None, None, True
+
+    df = load_df(log_id)
+    if df is None:
+        return None, None, True
+
+    doc = server.db.event_logs.find_one({"_id": ObjectId(log_id)})
+    filename = doc["filename"]
+
+    # enable delete button
+    return log_id, filename, False
+
+
+# ==========================================================
 # Populate Filter Paths
-# ---------------------------------------------------------
+# ==========================================================
 @callback(
     Output("filter-paths", "options"),
     Input("global-log-store", "data"),
@@ -305,27 +389,20 @@ def populate_filter_paths(log_id):
     if not log_id:
         return []
 
-    # Retrieve DF from server.LOG_STORE
-    df = getattr(server, "LOG_STORE", {}).get(log_id)
-    if df is None:
-        return []
-
-    if "EVENT" not in df.columns:
+    df = load_df(log_id)
+    if df is None or "EVENT" not in df.columns:
         return []
 
     df = df.copy()
     df["ABSTRACT"] = df["EVENT"]
     dfg = compute_dfg(df, "ABSTRACT")
 
-    return [
-        {"label": f"{a} → {b}", "value": f"{a}|{b}"}
-        for (a, b) in dfg.keys()
-    ]
+    return [{"label": f"{a} → {b}", "value": f"{a}|{b}"} for (a, b) in dfg.keys()]
 
 
-# ---------------------------------------------------------
-# Generate DFG Graph (WITH REAL TOP VARIANTS)
-# ---------------------------------------------------------
+# ==========================================================
+# Generate DFG Graph
+# ==========================================================
 @callback(
     Output("dfg-graph", "elements"),
     Input("global-log-store", "data"),
@@ -339,70 +416,97 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
     if not log_id:
         return []
 
-    # Retrieve DF from server.LOG_STORE
-    df = getattr(server, "LOG_STORE", {}).get(log_id)
+    df = load_df(log_id)
     if df is None:
         return []
 
     df = df.copy()
 
-    # Fallback if abstraction column missing
     if activity_type not in df.columns:
         activity_type = "EVENT"
 
     df["ABSTRACT"] = df[activity_type]
 
-    # ---- Top Variant Filtering ----
+    # --- Top Variants ---
     if top_variants != "none":
         k = int(top_variants)
-
         traces = (
             df.groupby("CASE ID")["ABSTRACT"]
             .apply(list)
             .value_counts()
         )
-
         top_traces = traces.head(k).index.tolist()
 
-        allowed_caseids = [
+        allowed = [
             cid for cid, grp in df.groupby("CASE ID")
             if grp["ABSTRACT"].tolist() in top_traces
         ]
+        df = df[df["CASE ID"].isin(allowed)]
 
-        df = df[df["CASE ID"].isin(allowed_caseids)]
-
-    # ---- Compute DFG ----
+    # --- Compute DFG ---
     dfg = compute_dfg(df, "ABSTRACT")
-
-    # Minimum frequency filter
     dfg = {k: v for k, v in dfg.items() if v >= min_freq}
 
-    # Filter paths
     if filter_paths:
-        allowed = {tuple(fp.split("|")) for fp in filter_paths}
-        dfg = {k: v for k, v in dfg.items() if k in allowed}
+        allowed_paths = {tuple(fp.split("|")) for fp in filter_paths}
+        dfg = {k: v for k, v in dfg.items() if k in allowed_paths}
 
-    # ---- Build Graph ----
+    # --- Build Graph ---
     nodes = {}
     edges = []
 
     for (a, b), weight in dfg.items():
         nodes[a] = True
         nodes[b] = True
-        edges.append({
-            "data": {"source": a, "target": b, "weight": weight}
-        })
+        edges.append({"data": {"source": a, "target": b, "weight": weight}})
 
     node_elements = [{"data": {"id": n, "label": n}} for n in nodes]
     return node_elements + edges
 
 
-# ---------------------------------------------------------
+# ==========================================================
 # Zoom Handling
-# ---------------------------------------------------------
+# ==========================================================
 @callback(
     Output("dfg-graph", "zoom"),
     Input("dfg-zoom", "value")
 )
 def update_zoom(val):
     return val
+
+
+# ==========================================================
+# DELETE LOG
+# ==========================================================
+@callback(
+    Output("delete-status", "children"),
+    Output("log-selector", "value", allow_duplicate=True),
+    Output("log-selector", "options", allow_duplicate=True),
+    Output("global-log-store", "data", allow_duplicate=True),
+    Output("global-log-name", "data", allow_duplicate=True),
+    Output("delete-log-btn", "disabled", allow_duplicate=True),
+    Input("delete-log-btn", "n_clicks"),
+    State("log-selector", "value"),
+    prevent_initial_call=True,
+)
+def delete_log(n, log_id):
+    if not log_id:
+        return "", None, no_update, None, None, True
+
+    db = server.db
+    db.event_logs.delete_one({"_id": ObjectId(log_id)})
+
+    if hasattr(server, "LOG_STORE"):
+        server.LOG_STORE.pop(log_id, None)
+
+    logs = list(db.event_logs.find({}, {"filename": 1}))
+    opts = [{"label": l["filename"], "value": str(l["_id"])} for l in logs]
+
+    return (
+        "Log deleted.",
+        None,
+        opts,
+        None,
+        None,
+        True,
+    )
