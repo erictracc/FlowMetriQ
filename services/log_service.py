@@ -1,3 +1,5 @@
+# services/log_service.py
+
 import pandas as pd
 import numpy as np
 from bson import ObjectId
@@ -5,34 +7,33 @@ from flask import current_app as server
 
 
 # ==========================================================
-# INTERNAL: Preprocess DF ONCE per log
+# INTERNAL PREPROCESSOR
+# Runs ONCE per uploaded log (heavy operations)
 # ==========================================================
-def _preprocess_df(df_raw):
-    """
-    Heavy preprocessing — runs ONCE per uploaded log.
-    Everything stored in cache for fast analysis.
-    """
-
+def _preprocess_df(df_raw: pd.DataFrame) -> dict:
     df = df_raw.copy()
 
-    # -------- 1) Datetime conversion ----------
+    # ----- Datetime cleaning -----
     if "START TIME" in df:
         df["START TIME"] = pd.to_datetime(df["START TIME"], errors="coerce")
+
     if "END TIME" in df:
         df["END TIME"] = pd.to_datetime(df["END TIME"], errors="coerce")
+    else:
+        df["END TIME"] = df["START TIME"]
 
-    # -------- 2) Event duration (minutes) -----
+    # ----- Duration -----
     if "START TIME" in df and "END TIME" in df:
         df["EVENT_DURATION"] = (
             df["END TIME"] - df["START TIME"]
-        ).dt.total_seconds() / 60
+        ).dt.total_seconds() / 60.0
     else:
         df["EVENT_DURATION"] = np.nan
 
-    # -------- 3) Sort for transitions ----------
+    # ----- Sort -----
     df = df.sort_values(["CASE ID", "START TIME"]).reset_index(drop=True)
 
-    # -------- 4) Precompute CASE durations -----
+    # ----- Case stats -----
     case_stats = (
         df.groupby("CASE ID")[["START TIME", "END TIME"]]
         .agg({"START TIME": "min", "END TIME": "max"})
@@ -40,11 +41,10 @@ def _preprocess_df(df_raw):
     )
     case_stats["total_duration"] = (
         (case_stats["END TIME"] - case_stats["START TIME"])
-        .dt.total_seconds()
-        / 60
+        .dt.total_seconds() / 60.0
     )
 
-    # -------- 5) Precompute ACTIVITY performance -----
+    # ----- Activity performance -----
     activity_perf = (
         df.groupby("EVENT")
         .agg(
@@ -56,7 +56,7 @@ def _preprocess_df(df_raw):
         .reset_index()
     )
 
-    # -------- 6) Precompute PATH transitions (fast!) -----
+    # ----- Transitions -----
     df["NEXT_EVENT"] = df.groupby("CASE ID")["EVENT"].shift(-1)
     df["NEXT_START"] = df.groupby("CASE ID")["START TIME"].shift(-1)
 
@@ -72,11 +72,10 @@ def _preprocess_df(df_raw):
             avg_duration=("TRANSITION_DURATION", "mean"),
         )
         .reset_index()
-    ).rename(columns={"EVENT": "SOURCE", "NEXT_EVENT": "TARGET"})
+        .rename(columns={"EVENT": "SOURCE", "NEXT_EVENT": "TARGET"})
+    )
 
-    # ---------------------------------------------
-    # RETURN the fully precomputed dataset
-    # ---------------------------------------------
+    # ----- Return consistent bundle -----
     return {
         "df": df,
         "case_stats": case_stats,
@@ -86,96 +85,77 @@ def _preprocess_df(df_raw):
 
 
 # ==========================================================
-# Load DF → from cache or MongoDB
+# SAFE LOAD FUNCTION — ALWAYS RETURNS A DATAFRAME
 # ==========================================================
-def load_df(log_id):
+def load_df(log_id: str) -> pd.DataFrame:
     """
-    Safely loads a DataFrame for the given log_id.
-    Supports:
-      - LOG_STORE[id] = {"df": df, ...}
-      - LOG_STORE[id] = df
-      - LOG_STORE[id] = full processed bundle with df inside
-      - Otherwise loads from MongoDB and caches properly.
+    ALWAYS returns a pandas DataFrame.
+    Ensures pages never receive dicts accidentally.
     """
 
-    # Ensure LOG_STORE exists
+    # Create LOG_STORE if not exists
     if not hasattr(server, "LOG_STORE"):
         server.LOG_STORE = {}
 
     entry = server.LOG_STORE.get(log_id)
 
-    # ----------------------------------------------------
-    # CASE 1 — Already cached correctly: {"df": df}
-    # ----------------------------------------------------
+    # -------- Case 1: Proper cached bundle --------
     if isinstance(entry, dict) and "df" in entry:
         return entry["df"]
 
-    # ----------------------------------------------------
-    # CASE 2 — Cached as DataFrame directly
-    # ----------------------------------------------------
+    # -------- Case 2: Someone accidentally cached df only --------
     if isinstance(entry, pd.DataFrame):
+        # Fix the cache structure so this never happens again
+        server.LOG_STORE[log_id] = {"df": entry}
         return entry
 
-    # ----------------------------------------------------
-    # CASE 3 — Cached dict but df under another key
-    # ex: {"processed": {"df": df}}
-    # ----------------------------------------------------
+    # -------- Case 3: Some dict with unknown structure --------
     if isinstance(entry, dict):
-        for key, value in entry.items():
-            if isinstance(value, pd.DataFrame):
-                return value
+        # Try to find a DataFrame inside
+        for val in entry.values():
+            if isinstance(val, pd.DataFrame):
+                server.LOG_STORE[log_id] = {"df": val}
+                return val
 
-    # ----------------------------------------------------
-    # CASE 4 — Not cached → Load from DB
-    # ----------------------------------------------------
+    # -------- Case 4: Not cached → Load from DB --------
     db = server.db
     doc = db.event_logs.find_one({"_id": ObjectId(log_id)})
 
     if not doc:
-        print(f"[log_service] ERROR: Could not find log {log_id} in DB")
+        print(f"[log_service] ERROR: Log {log_id} not found.")
         return pd.DataFrame()
 
-    # Convert events to DF
-    raw_df = pd.DataFrame(doc["events"])
+    raw_df = pd.DataFrame(doc.get("events", []))
 
-    # Run your preprocessing pipeline
+    # Ensure DF has CASE ID column
+    if "CASE ID" not in raw_df:
+        return pd.DataFrame()
+
     processed = _preprocess_df(raw_df)
 
-    # Ensure expected structure is cached
+    # Cache properly
     server.LOG_STORE[log_id] = processed
 
-    # Extract df safely
-    if isinstance(processed, dict) and "df" in processed:
-        return processed["df"]
-
-    # Fallback: attempt best guess
-    for key, value in processed.items():
-        if isinstance(value, pd.DataFrame):
-            return value
-
-    print(f"[log_service] ERROR: Malformed processed bundle for log {log_id}")
-    return pd.DataFrame()
-
+    return processed["df"]
 
 
 # ==========================================================
-# Save new log → MongoDB + full preprocessing + cache
+# SAVE NEW LOG → DB + CACHE
 # ==========================================================
-def save_log(df, filename):
+def save_log(df: pd.DataFrame, filename: str) -> str:
     db = server.db
 
     log_doc = {
         "filename": filename,
         "columns": list(df.columns),
         "n_events": len(df),
-        "n_cases": df["CASE ID"].nunique() if "CASE ID" in df else None,
+        "n_cases": df["CASE ID"].nunique(),
         "events": df.to_dict("records"),
     }
 
     inserted = db.event_logs.insert_one(log_doc)
     log_id = str(inserted.inserted_id)
 
-    # Preprocess & Cache
     processed = _preprocess_df(df)
 
     if not hasattr(server, "LOG_STORE"):
@@ -185,20 +165,19 @@ def save_log(df, filename):
 
     return log_id
 
+
 # ==========================================================
-# Delete a log from MongoDB + remove cache
+# DELETE LOG
 # ==========================================================
-def delete_log(log_id):
-    db = server.db
-    db.event_logs.delete_one({"_id": ObjectId(log_id)})
+def delete_log(log_id: str):
+    server.db.event_logs.delete_one({"_id": ObjectId(log_id)})
 
     if hasattr(server, "LOG_STORE"):
         server.LOG_STORE.pop(log_id, None)
 
 
 # ==========================================================
-# List all uploaded logs
+# LIST LOGS (for dropdown)
 # ==========================================================
 def list_logs():
-    db = server.db
-    return list(db.event_logs.find({}, {"filename": 1}))
+    return list(server.db.event_logs.find({}, {"filename": 1}))
