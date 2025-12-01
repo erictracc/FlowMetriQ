@@ -6,6 +6,11 @@ from auth import check_credentials
 from components.navbar import navbar
 from db.mongo import get_db
 from db.collections import ensure_collections
+from dash import Input, Output, State
+import pandas as pd
+
+from services.simulation_service import compute_activity_stats
+
 
 # ---------------------------------------------------------
 # Load server settings
@@ -110,3 +115,4 @@ if __name__ == "__main__":
         debug=True,
         use_reloader=False  # prevents double-execution and WinError 10038
     )
+
