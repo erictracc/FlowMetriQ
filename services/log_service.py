@@ -89,38 +89,72 @@ def _preprocess_df(df_raw):
 # Load DF → from cache or MongoDB
 # ==========================================================
 def load_df(log_id):
-    """Load preprocessed DF bundle from cache or MongoDB."""
+    """
+    Safely loads a DataFrame for the given log_id.
+    Supports:
+      - LOG_STORE[id] = {"df": df, ...}
+      - LOG_STORE[id] = df
+      - LOG_STORE[id] = full processed bundle with df inside
+      - Otherwise loads from MongoDB and caches properly.
+    """
 
-    if hasattr(server, "LOG_STORE") and log_id in server.LOG_STORE:
-        return server.LOG_STORE[log_id]["df"]
+    # Ensure LOG_STORE exists
+    if not hasattr(server, "LOG_STORE"):
+        server.LOG_STORE = {}
 
-    # Load from DB
+    entry = server.LOG_STORE.get(log_id)
+
+    # ----------------------------------------------------
+    # CASE 1 — Already cached correctly: {"df": df}
+    # ----------------------------------------------------
+    if isinstance(entry, dict) and "df" in entry:
+        return entry["df"]
+
+    # ----------------------------------------------------
+    # CASE 2 — Cached as DataFrame directly
+    # ----------------------------------------------------
+    if isinstance(entry, pd.DataFrame):
+        return entry
+
+    # ----------------------------------------------------
+    # CASE 3 — Cached dict but df under another key
+    # ex: {"processed": {"df": df}}
+    # ----------------------------------------------------
+    if isinstance(entry, dict):
+        for key, value in entry.items():
+            if isinstance(value, pd.DataFrame):
+                return value
+
+    # ----------------------------------------------------
+    # CASE 4 — Not cached → Load from DB
+    # ----------------------------------------------------
     db = server.db
     doc = db.event_logs.find_one({"_id": ObjectId(log_id)})
 
     if not doc:
-        return None
+        print(f"[log_service] ERROR: Could not find log {log_id} in DB")
+        return pd.DataFrame()
 
-    df = pd.DataFrame(doc["events"])
+    # Convert events to DF
+    raw_df = pd.DataFrame(doc["events"])
 
-    processed = _preprocess_df(df)
+    # Run your preprocessing pipeline
+    processed = _preprocess_df(raw_df)
 
-    # Cache entire bundle
-    if not hasattr(server, "LOG_STORE"):
-        server.LOG_STORE = {}
+    # Ensure expected structure is cached
     server.LOG_STORE[log_id] = processed
 
-    return processed["df"]
+    # Extract df safely
+    if isinstance(processed, dict) and "df" in processed:
+        return processed["df"]
 
+    # Fallback: attempt best guess
+    for key, value in processed.items():
+        if isinstance(value, pd.DataFrame):
+            return value
 
-def load_full_bundle(log_id):
-    """Load the entire precomputed bundle: df, case stats, activity perf, path perf."""
-    if hasattr(server, "LOG_STORE") and log_id in server.LOG_STORE:
-        return server.LOG_STORE[log_id]
-
-    # Otherwise load_df will populate LOG_STORE
-    load_df(log_id)
-    return server.LOG_STORE.get(log_id)
+    print(f"[log_service] ERROR: Malformed processed bundle for log {log_id}")
+    return pd.DataFrame()
 
 
 
@@ -150,7 +184,6 @@ def save_log(df, filename):
     server.LOG_STORE[log_id] = processed
 
     return log_id
-
 
 # ==========================================================
 # Delete a log from MongoDB + remove cache
