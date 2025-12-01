@@ -9,35 +9,11 @@ from bson import ObjectId
 
 # Import DFG helpers from service layer
 from services.dfg_service import compute_dfg, compute_dfg_graph
+from services.log_service import load_df
 
 cyto.load_extra_layouts()
 
 dash.register_page(__name__, path="/home", title="Dashboard")
-
-
-# ==========================================================
-# Helper: Load DF from memory → or fallback from MongoDB
-# ==========================================================
-def load_df(log_id):
-    # Check server cache first
-    if hasattr(server, "LOG_STORE") and log_id in server.LOG_STORE:
-        return server.LOG_STORE[log_id]
-
-    # If not cached: load from MongoDB
-    db = server.db
-    doc = db.event_logs.find_one({"_id": ObjectId(log_id)})
-    if doc:
-        df = pd.DataFrame(doc["events"])
-
-        # Re-cache for fast DFG interactions
-        if not hasattr(server, "LOG_STORE"):
-            server.LOG_STORE = {}
-        server.LOG_STORE[log_id] = df
-
-        return df
-
-    return None
-
 
 # ==========================================================
 # PAGE LAYOUT
