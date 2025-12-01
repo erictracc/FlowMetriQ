@@ -287,6 +287,7 @@ def populate_simulation_logs(_):
 # Load selected or uploaded log
 @callback(
     Output("simulation-log-store", "data"),
+    Output("global-log-store", "data", allow_duplicate=True),   # write to global
     Input("load-simulation-log-btn", "n_clicks"),
     State("simulation-log-selector", "value"),
     State("simulation-upload", "contents"),
@@ -295,18 +296,27 @@ def populate_simulation_logs(_):
 )
 def load_simulation_log(_, selected_log_id, contents, filename):
 
+    # CASE 1 — User picked existing DB log
     if selected_log_id:
-        return {"log_id": selected_log_id}
+        return {"log_id": selected_log_id}, {"log_id": selected_log_id}
 
+    # CASE 2 — User uploaded CSV
     if contents:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
 
-        df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
-        new_id = save_log(df, filename)
-        return {"log_id": new_id}
+        try:
+            df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+            new_id = save_log(df, filename)
 
-    return None
+            return {"log_id": new_id}, {"log_id": new_id}
+
+        except Exception as e:
+            print("[simulation] CSV upload error:", e)
+            return None, None
+
+    # Nothing selected / no upload
+    return None, None
 
 
 # Activity table + dropdown
@@ -397,14 +407,14 @@ def show_intervention_input(selected_type):
 def save_intervention(_, activity, inter_type, value, store):
 
     if not activity or not inter_type or value in (None, ""):
-        return store, "⚠️ Please fill all fields."
+        return store, " Please fill all fields."
 
     if store is None:
         store = {}
 
     store[activity] = {"type": inter_type, "value": value}
 
-    return store, f"✅ Saved intervention for {activity}: {inter_type} ({value})"
+    return store, f" Succesfully Saved intervention for {activity}: {inter_type} ({value})"
 
 
 # Run simulation
@@ -418,11 +428,11 @@ def save_intervention(_, activity, inter_type, value, store):
 def run_full_simulation(_, store, interventions):
 
     if not store:
-        return "⚠️ No log loaded."
+        return " No log loaded."
 
     df = load_df(store["log_id"])
     if df is None or df.empty:
-        return "⚠️ Invalid log."
+        return " Invalid log."
 
     df_sim = df.copy()
 
@@ -455,7 +465,7 @@ def run_full_simulation(_, store, interventions):
                 sim_case_durations.append(case[-1]["time"])
 
     if not sim_case_durations:
-        return "⚠️ Simulation produced no results."
+        return " Simulation produced no results."
 
     simulated_mean = sum(sim_case_durations) / len(sim_case_durations)
 
@@ -509,3 +519,25 @@ def run_full_simulation(_, store, interventions):
             style={"color": "gray", "fontSize": "13px"}
         )
     ])
+
+@callback(
+    Output("simulation-log-selector", "value", allow_duplicate=True),
+    Output("simulation-log-store", "data", allow_duplicate=True),
+    Input("global-log-store", "data"),
+    Input("url", "pathname"),
+    prevent_initial_call=True
+)
+def sync_simulation_with_global(global_store, pathname):
+
+    # Only auto-sync when user navigates to /simulation
+    if pathname != "/simulation":
+        return dash.no_update, dash.no_update
+
+    # Only update if a global log exists
+    if global_store and "log_id" in global_store:
+        log_id = global_store["log_id"]
+
+        # Update the dropdown + internal log store
+        return log_id, {"log_id": log_id}
+
+    return dash.no_update, dash.no_update

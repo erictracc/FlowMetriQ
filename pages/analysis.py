@@ -229,11 +229,35 @@ layout = html.Div(
 # ============================================
 @callback(
     Output("analysis-log-selector", "options"),
+    Output("analysis-log-selector", "value", allow_duplicate=True),
+    Input("global-log-store", "data"),
     Input("url", "pathname"),
+    prevent_initial_call='initial_duplicate',
 )
-def populate_logs(_):
+def populate_logs(global_log, pathname):
+
     logs = list_logs()
-    return [{"label": l["filename"], "value": str(l["_id"])} for l in logs]
+    options = [{"label": l["filename"], "value": str(l["_id"])} for l in logs]
+
+    # If we are NOT on /analysis → do NOT pre-select anything
+    if pathname != "/analysis":
+        return options, dash.no_update
+
+    # If global_log is invalid (None or not dict)
+    if not isinstance(global_log, dict):
+        return options, dash.no_update
+
+    # If no stored log id → user still chooses manually
+    log_id = global_log.get("log_id")
+    if not log_id:
+        return options, dash.no_update
+
+    # If stored ID is not in list_logs → also skip
+    if log_id not in [o["value"] for o in options]:
+        return options, dash.no_update
+
+    # SUCCESS → auto-select the remembered file
+    return options, log_id
 
 
 # ============================================
