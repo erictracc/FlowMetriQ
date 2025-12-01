@@ -8,7 +8,7 @@ layout = html.Div(
         "fontFamily": "Arial, sans-serif",
         "padding": "0",
         "margin": "0",
-        "backgroundColor": "#F5F6FA"
+        "backgroundColor": "#F5F7FB"
     },
     children=[
 
@@ -18,21 +18,32 @@ layout = html.Div(
                 "display": "flex",
                 "justifyContent": "space-between",
                 "alignItems": "center",
-                "padding": "20px 40px",
+                "padding": "20px 45px",
                 "backgroundColor": "white",
-                "boxShadow": "0 2px 6px rgba(0,0,0,0.08)",
+                "boxShadow": "0 2px 6px rgba(0,0,0,0.06)",
                 "position": "sticky",
                 "top": "0",
                 "zIndex": "1000"
             },
             children=[
-                html.H2("FlowMetriQ", style={"margin": 0, "color": "#1A237E"}),
+                html.H2(
+                    "FlowMetriQ",
+                    style={"margin": 0, "color": "#1A237E", "letterSpacing": "0.5px"}
+                ),
 
                 html.Div(
                     children=[
-                        html.A("Login", href="/login",
-                               style={"marginLeft": "20px", "fontSize": "16px", "color": "#1A237E",
-                                      "textDecoration": "none"})
+                        html.A(
+                            "Login",
+                            href="/login",
+                            style={
+                                "marginLeft": "20px",
+                                "fontSize": "17px",
+                                "color": "#1A237E",
+                                "fontWeight": "bold",
+                                "textDecoration": "none"
+                            }
+                        )
                     ]
                 )
             ],
@@ -41,35 +52,126 @@ layout = html.Div(
         # ----- HERO SECTION -----
         html.Div(
             style={
-                "padding": "100px 40px",
+                "padding": "110px 40px 120px",
                 "textAlign": "center",
-                "background": "linear-gradient(135deg, #1A237E, #3949AB)",
-                "color": "white"
+                "background": "linear-gradient(145deg, #1A237E 0%, #3949AB 50%, #5C6BC0 100%)",
+                "color": "white",
             },
             children=[
                 html.H1(
-                    "Unlock Insights From Your Business Processes",
-                    style={"fontSize": "42px", "fontWeight": "bold", "marginBottom": "20px"},
+                    "Visualize, Diagnose, and Optimize Your Processes",
+                    style={
+                        "fontSize": "48px",
+                        "fontWeight": "900",
+                        "marginBottom": "20px",
+                        "lineHeight": "1.15"
+                    }
                 ),
                 html.P(
-                    "Analyze throughput, detect bottlenecks, and enhance performance using real event logs.",
-                    style={"fontSize": "20px", "opacity": "0.9"},
+                    "FlowMetriQ transforms event logs into actionable insights — from bottleneck discovery to predictive forecasting.",
+                    style={
+                        "fontSize": "20px",
+                        "opacity": "0.92",
+                        "maxWidth": "850px",
+                        "margin": "0 auto",
+                    }
                 ),
 
-                html.A(
-                    "Go to Login →",
-                    href="/login",
+                html.Div(
+                    style={"marginTop": "40px"},
+                    children=[
+                        html.A(
+                            "Get Started →",
+                            href="/login",
+                            style={
+                                "display": "inline-block",
+                                "padding": "14px 34px",
+                                "backgroundColor": "#FFC107",
+                                "borderRadius": "8px",
+                                "color": "#1A237E",
+                                "fontWeight": "bold",
+                                "fontSize": "20px",
+                                "textDecoration": "none",
+                                "transition": "0.25s",
+                            }
+                        ),
+                    ]
+                )
+            ],
+        ),
+
+        # ----- FEATURES SECTION -----
+        html.Div(
+            style={
+                "padding": "80px 40px",
+                "textAlign": "center",
+                "backgroundColor": "#F5F7FB"
+            },
+            children=[
+                html.H2(
+                    "Why FlowMetriQ?",
                     style={
-                        "display": "inline-block",
-                        "marginTop": "30px",
-                        "padding": "12px 28px",
-                        "backgroundColor": "#FFC107",
-                        "borderRadius": "6px",
+                        "fontSize": "34px",
+                        "fontWeight": "800",
                         "color": "#1A237E",
-                        "fontWeight": "bold",
-                        "textDecoration": "none",
-                        "fontSize": "18px"
+                        "marginBottom": "50px",
                     }
+                ),
+
+                html.Div(
+                    style={
+                        "display": "flex",
+                        "justifyContent": "center",
+                        "flexWrap": "wrap",
+                        "gap": "40px",
+                    },
+                    children=[
+
+                        # Feature 1
+                        html.Div(
+                            style={
+                                "width": "280px",
+                                "padding": "25px",
+                                "backgroundColor": "white",
+                                "borderRadius": "10px",
+                                "boxShadow": "0 2px 10px rgba(0,0,0,0.08)",
+                            },
+                            children=[
+                                html.H3("Process Discovery", style={"color": "#1A237E"}),
+                                html.P("Generate flow maps and uncover hidden inefficiencies.")
+                            ]
+                        ),
+
+                        # Feature 2
+                        html.Div(
+                            style={
+                                "width": "280px",
+                                "padding": "25px",
+                                "backgroundColor": "white",
+                                "borderRadius": "10px",
+                                "boxShadow": "0 2px 10px rgba(0,0,0,0.08)",
+                            },
+                            children=[
+                                html.H3("Bottleneck Detection", style={"color": "#1A237E"}),
+                                html.P("Instantly identify long-running steps and delays.")
+                            ]
+                        ),
+
+                        # Feature 3
+                        html.Div(
+                            style={
+                                "width": "280px",
+                                "padding": "25px",
+                                "backgroundColor": "white",
+                                "borderRadius": "10px",
+                                "boxShadow": "0 2px 10px rgba(0,0,0,0.08)",
+                            },
+                            children=[
+                                html.H3("Predictive Models", style={"color": "#1A237E"}),
+                                html.P("Forecast next steps and remaining process time.")
+                            ]
+                        ),
+                    ]
                 )
             ],
         ),
