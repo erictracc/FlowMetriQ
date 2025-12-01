@@ -1,0 +1,6 @@
+{
+  "host": "127.0.0.1",
+  "port": 8050,
+  "database_uri": "mongodb://admin:adminpassword@192.168.195.69:27017/?authSource=admin",
+  "database_name": "flowmetriq"
+}
