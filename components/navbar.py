@@ -23,6 +23,7 @@ def navbar():
                 children=[
                     html.A("Home", href="/home", style={"textDecoration": "none", "color": "#1A237E"}),
                     html.A("Analysis", href="/analysis", style={"textDecoration": "none", "color": "#1A237E"}),
+                    html.A("Prediction", href="/prediction", style={"textDecoration": "none", "color": "#1A237E"}),
                     html.A("Logout", href="/logout", style={"textDecoration": "none", "color": "#C62828"})
                 ]
             ),
