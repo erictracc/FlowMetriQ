@@ -27,6 +27,12 @@ app = Dash(
     use_pages=True,
     suppress_callback_exceptions=True,
 )
+app.config.suppress_callback_exceptions = True
+app.config.meta_tags = []
+
+# app.config.suppress_callback_exceptions = True
+# app.config.allow_callbacks_without_inputs = True
+# app.config.prevent_initial_callbacks = "initial_duplicate"
 
 server = app.server
 server.secret_key = "H39as98jhASD987nasd798ASDa98s7dASDV"  # important

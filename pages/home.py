@@ -61,7 +61,8 @@ layout = html.Div(
                 html.Label("Upload Event Log"),
                 dcc.Upload(
                     id="upload-log-home",
-                    children=html.Div("Drag & Drop or Click", style={"textAlign": "center"}),
+                    children=html.Div("Drag & Drop or Click",
+                                      style={"textAlign": "center"}),
                     multiple=False,
                     style={
                         "width": "100%",
@@ -127,7 +128,7 @@ layout = html.Div(
                     step=0.5,
                     value=1,
                     tooltip={"placement": "bottom"},
-                    marks={},   # no labels
+                    marks={},  # no labels
                 ),
 
                 html.Div(style={"marginBottom": "30px"}),
@@ -154,7 +155,8 @@ layout = html.Div(
                     disabled=True,
                 ),
 
-                html.Div(id="delete-status", style={"marginTop": "10px", "color": "#C62828"}),
+                html.Div(id="delete-status",
+                         style={"marginTop": "10px", "color": "#C62828"}),
             ],
         ),
 
@@ -212,7 +214,7 @@ layout = html.Div(
                         "rankDir": "TB",
                         "animate": False,
                         "fit": False,
-                        "padding": 0
+                        "padding": 0,
                     },
                     style={
                         "width": "100%",
@@ -260,24 +262,26 @@ layout = html.Div(
     ],
 )
 
-
 # ==========================================================
-# Upload Log → Save to Mongo + Cache locally
+# Upload Log → Save to Mongo + Cache locally + UPDATE UI
 # ==========================================================
 @callback(
     Output("home-upload-status", "children"),
-    Output("global-log-store", "data"),
-    Output("global-log-name", "data"),
+    Output("global-log-store", "data", allow_duplicate=True),
+    Output("global-log-name", "data", allow_duplicate=True),
+    Output("log-selector", "value", allow_duplicate=True),
+    Output("log-selector", "options", allow_duplicate=True),
     Input("upload-log-home", "contents"),
     State("upload-log-home", "filename"),
+    prevent_initial_call=True,
 )
 def handle_upload(contents, filename):
     if contents is None:
-        return "", None, None
+        return "", None, None, no_update, no_update
 
     try:
-        data = base64.b64decode(contents.split(",")[1]).decode("utf-8")
-        df = pd.read_csv(io.StringIO(data))
+        decoded = base64.b64decode(contents.split(",")[1]).decode("utf-8")
+        df = pd.read_csv(io.StringIO(decoded))
 
         # Save to MongoDB
         db = server.db
@@ -296,10 +300,22 @@ def handle_upload(contents, filename):
             server.LOG_STORE = {}
         server.LOG_STORE[log_id] = df
 
-        return f"Uploaded file: {filename}", log_id, filename
+        global_obj = {"log_id": log_id, "filename": filename}
+
+        # Refresh dropdown
+        logs = list(db.event_logs.find({}, {"filename": 1}))
+        options = [{"label": l["filename"], "value": str(l["_id"])} for l in logs]
+
+        return (
+            f"Uploaded file: {filename}",
+            global_obj,
+            filename,
+            log_id,
+            options,
+        )
 
     except Exception as e:
-        return f"Upload failed: {str(e)}", None, None
+        return f"Upload failed: {str(e)}", None, None, no_update, no_update
 
 
 # ==========================================================
@@ -316,8 +332,27 @@ def populate_log_dropdown(_):
 
 
 # ==========================================================
-# Selecting a log reloads it from Mongo into global stores
-# + enables delete button
+# Keep Home dropdown in sync with global-log-store
+# ==========================================================
+@callback(
+    Output("log-selector", "value", allow_duplicate=True),
+    Input("global-log-store", "data"),
+    Input("url", "pathname"),
+    prevent_initial_call="initial_duplicate",
+)
+def sync_log_selector(global_log, pathname):
+    if pathname != "/home":
+        return no_update
+
+    if isinstance(global_log, dict):
+        log_id = global_log.get("log_id")
+        return log_id or no_update
+
+    return no_update
+
+
+# ==========================================================
+# Selecting a log reloads it into global store
 # ==========================================================
 @callback(
     Output("global-log-store", "data", allow_duplicate=True),
@@ -337,8 +372,9 @@ def load_selected_log(log_id):
     doc = server.db.event_logs.find_one({"_id": ObjectId(log_id)})
     filename = doc["filename"]
 
-    # enable delete button
-    return log_id, filename, False
+    global_obj = {"log_id": log_id, "filename": filename}
+
+    return global_obj, filename, False
 
 
 # ==========================================================
@@ -348,7 +384,11 @@ def load_selected_log(log_id):
     Output("filter-paths", "options"),
     Input("global-log-store", "data"),
 )
-def populate_filter_paths(log_id):
+def populate_filter_paths(global_log):
+    if not isinstance(global_log, dict):
+        return []
+
+    log_id = global_log.get("log_id")
     if not log_id:
         return []
 
@@ -356,9 +396,7 @@ def populate_filter_paths(log_id):
     if df is None or "EVENT" not in df.columns:
         return []
 
-    # Use the service-layer DFG helper directly on EVENT
     dfg = compute_dfg(df, "EVENT")
-
     return [{"label": f"{a} → {b}", "value": f"{a}|{b}"} for (a, b) in dfg.keys()]
 
 
@@ -374,7 +412,11 @@ def populate_filter_paths(log_id):
     Input("filter-paths", "value"),
     Input("refresh-graph", "n_clicks"),
 )
-def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refresh):
+def update_dfg(global_log, activity_type, min_freq, top_variants, filter_paths, refresh):
+    if not isinstance(global_log, dict):
+        return []
+
+    log_id = global_log.get("log_id")
     if not log_id:
         return []
 
@@ -384,22 +426,18 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
 
     df = df.copy()
 
-    # ---------- Top Variants (same behavior as before) ----------
+    # ---------- Top Variants ----------
     top_variant_cases = None
+
     if top_variants != "none":
         k = int(top_variants)
 
-        # Use the current abstraction when defining traces
         if activity_type in df.columns:
             df["ABSTRACT"] = df[activity_type]
         else:
             df["ABSTRACT"] = df["EVENT"]
 
-        traces = (
-            df.groupby("CASE ID")["ABSTRACT"]
-            .apply(list)
-            .value_counts()
-        )
+        traces = df.groupby("CASE ID")["ABSTRACT"].apply(list).value_counts()
         top_traces = traces.head(k).index.tolist()
 
         top_variant_cases = [
@@ -407,7 +445,6 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
             if grp["ABSTRACT"].tolist() in top_traces
         ]
 
-    # ---------- Delegate DFG + filtering to service ----------
     return compute_dfg_graph(
         df=df,
         activity_type=activity_type,
@@ -422,10 +459,9 @@ def update_dfg(log_id, activity_type, min_freq, top_variants, filter_paths, refr
 # ==========================================================
 @callback(
     Output("dfg-graph", "zoom"),
-    Input("dfg-zoom", "value")
+    Input("dfg-zoom", "value"),
 )
 def update_zoom(val):
-    # direct mapping slider → cytoscape zoom
     return val
 
 

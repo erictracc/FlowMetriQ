@@ -530,3 +530,19 @@ def update_graphs_for_log(log_id):
         duration_boxplot(df),
         event_timeseries(df),
     )
+
+# ============================================
+# SYNC — Analysis updates global-log-store when user selects a log
+# ============================================
+@callback(
+    Output("global-log-store", "data", allow_duplicate=True),
+    Input("analysis-log-selector", "value"),
+    prevent_initial_call=True
+)
+def sync_global_from_analysis(log_id):
+
+    if not log_id:
+        return dash.no_update
+
+    # Return as dictionary for consistency with Home/Simulation
+    return {"log_id": log_id}

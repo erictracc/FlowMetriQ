@@ -1,5 +1,5 @@
 import dash
-from dash import html, dcc, dash_table, callback, Input, Output, State
+from dash import html, dcc, dash_table, callback, Input, Output, State, no_update
 import pandas as pd
 import plotly.graph_objects as go
 import base64, io
@@ -36,7 +36,7 @@ layout = html.Div(
                 ),
 
                 # ============================================================
-                # Log Selector + Upload Section
+                # Log Selector + Upload
                 # ============================================================
                 html.Div(
                     style={
@@ -164,9 +164,9 @@ layout = html.Div(
                         ),
 
                         html.Ul(style={"color": "gray"}, children=[
-                            html.Li("Deterministic: replace duration with a fixed time (HH:MM:SS)"),
-                            html.Li("Speedup: reduce duration (0.20 = 20% faster)"),
-                            html.Li("Slowdown: increase duration (0.30 = 30% slower)")
+                            html.Li("Deterministic: fixed duration (HH:MM:SS)"),
+                            html.Li("Speedup: 0.20 = 20% faster"),
+                            html.Li("Slowdown: 0.30 = 30% slower")
                         ]),
 
                         dcc.Store(id="interventions-store", storage_type="session"),
@@ -183,7 +183,7 @@ layout = html.Div(
                         dcc.Dropdown(
                             id="intervention-type-dropdown",
                             options=[
-                                {"label": "Deterministic (fixed duration)", "value": "DETERMINISTIC"},
+                                {"label": "Deterministic (fixed)", "value": "DETERMINISTIC"},
                                 {"label": "Speedup (shorter)", "value": "SPEEDUP"},
                                 {"label": "Slowdown (longer)", "value": "SLOWDOWN"},
                             ],
@@ -215,7 +215,7 @@ layout = html.Div(
                 ),
 
                 # ============================================================
-                # Simulation Results + Explanation
+                # Simulation Results
                 # ============================================================
                 html.Div(
                     style={
@@ -237,11 +237,11 @@ layout = html.Div(
                             children=[
                                 html.H5("How This Simulation Works", style={"marginBottom": "8px"}),
                                 html.Ul(style={"color": "#555"}, children=[
-                                    html.Li("Markov-chain model built from event sequences"),
-                                    html.Li("Activity duration distributions learned from input log"),
-                                    html.Li("Interventions modify duration distributions"),
+                                    html.Li("Markov-chain routing model"),
+                                    html.Li("Baseline duration distributions learned from log"),
+                                    html.Li("Interventions modify distributions"),
                                     html.Li("Monte-Carlo simulation generates new synthetic cases"),
-                                    html.Li("We compare average case duration before/after"),
+                                    html.Li("Compare baseline vs simulated case durations"),
                                 ])
                             ]
                         ),
@@ -274,7 +274,7 @@ layout = html.Div(
 # CALLBACKS
 # =====================================================================
 
-# Populate dropdown
+# Populate dropdown from Mongo
 @callback(
     Output("simulation-log-selector", "options"),
     Input("url", "pathname")
@@ -284,10 +284,12 @@ def populate_simulation_logs(_):
     return [{"label": l["filename"], "value": str(l["_id"])} for l in logs]
 
 
-# Load selected or uploaded log
+# ============================================================
+# Load selected or uploaded log  (PATCHED)
+# ============================================================
 @callback(
     Output("simulation-log-store", "data"),
-    Output("global-log-store", "data", allow_duplicate=True),   # write to global
+    Output("global-log-store", "data", allow_duplicate=True),
     Input("load-simulation-log-btn", "n_clicks"),
     State("simulation-log-selector", "value"),
     State("simulation-upload", "contents"),
@@ -296,11 +298,21 @@ def populate_simulation_logs(_):
 )
 def load_simulation_log(_, selected_log_id, contents, filename):
 
-    # CASE 1 — User picked existing DB log
+    # CASE 1 — selected existing log
     if selected_log_id:
-        return {"log_id": selected_log_id}, {"log_id": selected_log_id}
+        # Get filename from DB via list_logs (upload filename state may be None)
+        fname = None
+        for doc in list_logs():
+            if str(doc["_id"]) == selected_log_id:
+                fname = doc.get("filename")
+                break
 
-    # CASE 2 — User uploaded CSV
+        return (
+            {"log_id": selected_log_id},
+            {"log_id": selected_log_id, "filename": fname}
+        )
+
+    # CASE 2 — uploaded CSV
     if contents:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
@@ -309,17 +321,20 @@ def load_simulation_log(_, selected_log_id, contents, filename):
             df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
             new_id = save_log(df, filename)
 
-            return {"log_id": new_id}, {"log_id": new_id}
-
+            return (
+                {"log_id": new_id},
+                {"log_id": new_id, "filename": filename}
+            )
         except Exception as e:
             print("[simulation] CSV upload error:", e)
-            return None, None
+            return no_update, no_update
 
-    # Nothing selected / no upload
-    return None, None
+    return no_update, no_update
 
 
-# Activity table + dropdown
+# ============================================================
+# Activity table + dropdown  (EVENT_DURATION patched)
+# ============================================================
 @callback(
     Output("activity-stats-table", "data"),
     Output("intervention-activity-dropdown", "options"),
@@ -336,11 +351,21 @@ def update_simulation_view(store):
 
     df_sim = df.copy()
 
-    # normalize
-    if "EVENT" in df_sim and "ACTIVITY" not in df_sim:
+    # Normalize activity / case IDs
+    if "EVENT" in df_sim.columns and "ACTIVITY" not in df_sim.columns:
         df_sim["ACTIVITY"] = df_sim["EVENT"]
-    if "CASE ID" in df_sim and "CASE_ID" not in df_sim:
+    if "CASE ID" in df_sim.columns and "CASE_ID" not in df_sim.columns:
         df_sim["CASE_ID"] = df_sim["CASE ID"]
+
+    # Ensure EVENT_DURATION exists (minutes)
+    if "START TIME" in df_sim.columns and "END TIME" in df_sim.columns:
+        df_sim["START TIME"] = pd.to_datetime(df_sim["START TIME"], errors="coerce")
+        df_sim["END TIME"] = pd.to_datetime(df_sim["END TIME"], errors="coerce")
+        df_sim["EVENT_DURATION"] = (
+            df_sim["END TIME"] - df_sim["START TIME"]
+        ).dt.total_seconds() / 60.0
+    elif "EVENT_DURATION" not in df_sim.columns:
+        df_sim["EVENT_DURATION"] = pd.NA
 
     stats = compute_activity_stats(df_sim)
     options = [{"label": s["activity"], "value": s["activity"]} for s in stats]
@@ -348,7 +373,9 @@ def update_simulation_view(store):
     return stats, options
 
 
-# Dynamic intervention value field
+# ============================================================
+# Dynamic intervention input
+# ============================================================
 @callback(
     Output("intervention-value-container", "children"),
     Input("intervention-type-dropdown", "value"),
@@ -393,7 +420,9 @@ def show_intervention_input(selected_type):
     ])
 
 
+# ============================================================
 # Save intervention
+# ============================================================
 @callback(
     Output("interventions-store", "data", allow_duplicate=True),
     Output("intervention-feedback", "children", allow_duplicate=True),
@@ -414,10 +443,12 @@ def save_intervention(_, activity, inter_type, value, store):
 
     store[activity] = {"type": inter_type, "value": value}
 
-    return store, f" Succesfully Saved intervention for {activity}: {inter_type} ({value})"
+    return store, f" Successfully saved intervention for {activity}: {inter_type} ({value})"
 
 
-# Run simulation
+# ============================================================
+# Run simulation  (EVENT_DURATION patched)
+# ============================================================
 @callback(
     Output("simulation-results", "children"),
     Input("run-simulation-btn", "n_clicks"),
@@ -436,13 +467,23 @@ def run_full_simulation(_, store, interventions):
 
     df_sim = df.copy()
 
-    # align columns
-    if "EVENT" in df_sim and "ACTIVITY" not in df_sim:
+    # Normalize
+    if "EVENT" in df_sim.columns and "ACTIVITY" not in df_sim.columns:
         df_sim["ACTIVITY"] = df_sim["EVENT"]
-    if "CASE ID" in df_sim and "CASE_ID" not in df_sim:
+    if "CASE ID" in df_sim.columns and "CASE_ID" not in df_sim.columns:
         df_sim["CASE_ID"] = df_sim["CASE ID"]
 
-    # baseline distributions
+    # Ensure EVENT_DURATION exists (minutes)
+    if "START TIME" in df_sim.columns and "END TIME" in df_sim.columns:
+        df_sim["START TIME"] = pd.to_datetime(df_sim["START TIME"], errors="coerce")
+        df_sim["END TIME"] = pd.to_datetime(df_sim["END TIME"], errors="coerce")
+        df_sim["EVENT_DURATION"] = (
+            df_sim["END TIME"] - df_sim["START TIME"]
+        ).dt.total_seconds() / 60.0
+    elif "EVENT_DURATION" not in df_sim.columns:
+        df_sim["EVENT_DURATION"] = pd.NA
+
+    # Baseline distributions + Markov chain
     baseline_dists = extract_baseline_distributions(df_sim)
     markov = build_markov_chain(df_sim)
 
@@ -451,13 +492,11 @@ def run_full_simulation(_, store, interventions):
 
     modified_dists = apply_interventions(baseline_dists, interventions)
 
-    # Run simulation (fixed bug: pass df_sim!)
     sim_results = run_simulation(
         markov, modified_dists, df_sim,
         n_cases=200, iterations=3
     )
 
-    # Extract simulated case durations
     sim_case_durations = []
     for iteration in sim_results:
         for case in iteration:
@@ -469,21 +508,20 @@ def run_full_simulation(_, store, interventions):
 
     simulated_mean = sum(sim_case_durations) / len(sim_case_durations)
 
-    # Baseline case mean
-    if "CASE_ID" in df_sim:
+    if "CASE_ID" in df_sim.columns:
         baseline_mean = df_sim.groupby("CASE_ID")["EVENT_DURATION"].sum().mean()
+        baseline_case_totals = df_sim.groupby("CASE_ID")["EVENT_DURATION"].sum()
     else:
         baseline_mean = df_sim["EVENT_DURATION"].mean()
+        baseline_case_totals = df_sim["EVENT_DURATION"]
 
-    # % improvement
     improvement = (baseline_mean - simulated_mean) / baseline_mean * 100
     color = "#2E7D32" if improvement >= 0 else "#C62828"
     direction = "faster" if improvement >= 0 else "slower"
 
-    # ===================== Histogram =======================
     hist_fig = go.Figure()
     hist_fig.add_trace(go.Histogram(
-        x=df_sim.groupby("CASE_ID")["EVENT_DURATION"].sum(),
+        x=baseline_case_totals,
         name="Baseline Durations",
         opacity=0.6
     ))
@@ -499,7 +537,6 @@ def run_full_simulation(_, store, interventions):
         yaxis_title="Count"
     )
 
-    # ===================== Return UI =======================
     return html.Div([
         html.H4("Simulation Summary"),
         html.P(f"Baseline mean case duration: {baseline_mean:.2f} minutes"),
@@ -520,24 +557,35 @@ def run_full_simulation(_, store, interventions):
         )
     ])
 
+
+# ============================================================
+# Sync simulation with GLOBAL store (PATCHED)
+# ============================================================
 @callback(
     Output("simulation-log-selector", "value", allow_duplicate=True),
     Output("simulation-log-store", "data", allow_duplicate=True),
     Input("global-log-store", "data"),
+    Input("simulation-log-selector", "options"),
     Input("url", "pathname"),
     prevent_initial_call=True
 )
-def sync_simulation_with_global(global_store, pathname):
+def sync_simulation_with_global(global_store, options, pathname):
 
-    # Only auto-sync when user navigates to /simulation
     if pathname != "/simulation":
-        return dash.no_update, dash.no_update
+        return no_update, no_update
 
-    # Only update if a global log exists
-    if global_store and "log_id" in global_store:
-        log_id = global_store["log_id"]
+    if not isinstance(global_store, dict):
+        return no_update, no_update
 
-        # Update the dropdown + internal log store
-        return log_id, {"log_id": log_id}
+    log_id = global_store.get("log_id")
+    filename = global_store.get("filename")
 
-    return dash.no_update, dash.no_update
+    if not log_id or not options:
+        return no_update, no_update
+
+    option_values = [opt["value"] for opt in options]
+
+    if log_id not in option_values:
+        return no_update, no_update
+
+    return log_id, {"log_id": log_id, "filename": filename}
