@@ -131,7 +131,7 @@ layout = html.Div(
                     ],
                 ),
                 html.Div(
-                    style={"minWidth": "220px", "flex": "1"},
+                    style={"minWidth": "220px",                    "flex": "1"},
                     children=[
                         html.Label("Case Viewer"),
                         dcc.Dropdown(
@@ -152,6 +152,21 @@ layout = html.Div(
                         ),
                     ],
                 ),
+
+                # -------------- TEAM FILTER ADDED HERE --------------
+                html.Div(
+                    style={"minWidth": "200px", "flex": "1"},
+                    children=[
+                        html.Label("Team Filter"),
+                        dcc.Dropdown(
+                            id="team-filter",
+                            multi=True,
+                            placeholder="Filter by team...",
+                            value=[],
+                        ),
+                    ],
+                ),
+
                 html.Div(
                     style={"minWidth": "260px"},
                     children=[
@@ -163,6 +178,7 @@ layout = html.Div(
                         ),
                     ],
                 ),
+
                 # RUN ANALYSIS
                 html.Button(
                     "Run Analysis",
@@ -232,32 +248,21 @@ layout = html.Div(
     Output("analysis-log-selector", "value", allow_duplicate=True),
     Input("global-log-store", "data"),
     Input("url", "pathname"),
-    prevent_initial_call='initial_duplicate',
+    prevent_initial_call="initial_duplicate",
 )
 def populate_logs(global_log, pathname):
 
     logs = list_logs()
     options = [{"label": l["filename"], "value": str(l["_id"])} for l in logs]
 
-    # If we are NOT on /analysis → do NOT pre-select anything
-    if pathname != "/analysis":
-        return options, dash.no_update
+    # Auto-select only when entering Analysis page
+    if pathname == "/analysis":
+        if isinstance(global_log, dict):
+            log_id = global_log.get("log_id")
+            if log_id and log_id in [o["value"] for o in options]:
+                return options, log_id
 
-    # If global_log is invalid (None or not dict)
-    if not isinstance(global_log, dict):
-        return options, dash.no_update
-
-    # If no stored log id → user still chooses manually
-    log_id = global_log.get("log_id")
-    if not log_id:
-        return options, dash.no_update
-
-    # If stored ID is not in list_logs → also skip
-    if log_id not in [o["value"] for o in options]:
-        return options, dash.no_update
-
-    # SUCCESS → auto-select the remembered file
-    return options, log_id
+    return options, dash.no_update
 
 
 # ============================================
@@ -267,6 +272,8 @@ def populate_logs(global_log, pathname):
     Output("case-selector", "options"),
     Output("event-filter", "options"),
     Output("event-filter", "value"),
+    Output("team-filter", "options"),
+    Output("team-filter", "value"),
     Output("date-range-filter", "min_date_allowed"),
     Output("date-range-filter", "max_date_allowed"),
     Output("date-range-filter", "start_date"),
@@ -281,11 +288,11 @@ def populate_logs(global_log, pathname):
 def load_log_and_initial_analysis(log_id):
 
     if not log_id:
-        return [], [], [], None, None, None, None, [], [], [], [], []
+        return [], [], [], [], [], None, None, None, None, [], [], [], [], []
 
     df = load_df(log_id)
     if df is None or df.empty:
-        return [], [], [], None, None, None, None, [], [], [], [], []
+        return [], [], [], [], [], None, None, None, None, [], [], [], [], []
 
     df = preprocess(df)
 
@@ -293,9 +300,16 @@ def load_log_and_initial_analysis(log_id):
     case_stats = compute_case_stats(df)
     case_options = [{"label": str(c), "value": str(c)} for c in case_stats["CASE ID"]]
 
-    # EVENT FILTER
+    # EVENT FILTER OPTIONS
     event_types = sorted(df["EVENT"].dropna().unique())
     event_options = [{"label": e, "value": e} for e in event_types]
+
+    # TEAM FILTER OPTIONS
+    if "TEAM" in df.columns:
+        team_types = sorted(df["TEAM"].dropna().unique())
+        team_options = [{"label": t, "value": t} for t in team_types]
+    else:
+        team_options = []
 
     # DATE RANGE
     min_date = df["START TIME"].min()
@@ -317,7 +331,7 @@ def load_log_and_initial_analysis(log_id):
     perf_data = perf_df.to_dict("records")
     perf_columns = [{"name": c, "id": c} for c in perf_df.columns]
 
-    # BOTTLENECKS
+    # BOTTLENECK TABLE
     bottlenecks = compute_bottlenecks(df)
     bottleneck_df = bottlenecks["path"]
     bottleneck_data = bottleneck_df.to_dict("records")
@@ -326,6 +340,8 @@ def load_log_and_initial_analysis(log_id):
     return (
         case_options,
         event_options,
+        [],
+        team_options,
         [],
         min_date,
         max_date,
@@ -352,11 +368,12 @@ def load_log_and_initial_analysis(log_id):
     State("analysis-log-selector", "value"),
     State("case-selector", "value"),
     State("event-filter", "value"),
+    State("team-filter", "value"),
     State("date-range-filter", "start_date"),
     State("date-range-filter", "end_date"),
     prevent_initial_call=True,
 )
-def run_analysis(_, log_id, case_id, event_filter, start_date, end_date):
+def run_analysis(_, log_id, case_id, event_filter, team_filter, start_date, end_date):
 
     if not log_id:
         return [], [], [], [], []
@@ -372,6 +389,9 @@ def run_analysis(_, log_id, case_id, event_filter, start_date, end_date):
 
     if event_filter:
         filtered = filtered[filtered["EVENT"].isin(event_filter)]
+
+    if team_filter:
+        filtered = filtered[filtered["TEAM"].isin(team_filter)]
 
     if case_id:
         filtered = filtered[filtered["CASE ID"] == str(case_id)]
@@ -413,7 +433,7 @@ def run_analysis(_, log_id, case_id, event_filter, start_date, end_date):
 
 
 # ============================================
-# CASE TIMELINE (filtered exactly like analysis)
+# CASE TIMELINE (same filtering logic)
 # ============================================
 @callback(
     Output("case-timeline", "figure"),
@@ -421,10 +441,11 @@ def run_analysis(_, log_id, case_id, event_filter, start_date, end_date):
     State("analysis-log-selector", "value"),
     State("case-selector", "value"),
     State("event-filter", "value"),
+    State("team-filter", "value"),
     State("date-range-filter", "start_date"),
     State("date-range-filter", "end_date"),
 )
-def show_case_timeline(_, log_id, case_id, event_filter, start_date, end_date):
+def show_case_timeline(_, log_id, case_id, event_filter, team_filter, start_date, end_date):
 
     fig = go.Figure()
 
@@ -437,11 +458,14 @@ def show_case_timeline(_, log_id, case_id, event_filter, start_date, end_date):
 
     df = preprocess(df)
 
-    # MATCH run_analysis filters
+    # MATCH ANALYSIS FILTERS
     filtered = df.copy()
 
     if event_filter:
         filtered = filtered[filtered["EVENT"].isin(event_filter)]
+
+    if team_filter:
+        filtered = filtered[filtered["TEAM"].isin(team_filter)]
 
     if start_date and end_date:
         start_ts, end_ts = pd.to_datetime(start_date), pd.to_datetime(end_date)
@@ -456,7 +480,7 @@ def show_case_timeline(_, log_id, case_id, event_filter, start_date, end_date):
         fig.update_layout(height=300, title=f"⚠️ No events found for Case {case_id}")
         return fig
 
-    # build the timeline
+    # TIMELINE
     fig = px.timeline(
         case_df.sort_values("START TIME"),
         x_start="START TIME",
@@ -477,7 +501,7 @@ def show_case_timeline(_, log_id, case_id, event_filter, start_date, end_date):
 
 
 # ============================================
-# ADDITIONAL VISUAL INSIGHTS (per LOG, not per CASE)
+# ADDITIONAL INSIGHTS (not filtered — full log)
 # ============================================
 @callback(
     Output("graph-event-frequency", "figure"),
@@ -488,7 +512,6 @@ def show_case_timeline(_, log_id, case_id, event_filter, start_date, end_date):
 )
 def update_graphs_for_log(log_id):
 
-    # If no log -> empty graphs
     if not log_id:
         empty = go.Figure()
         return empty, empty, empty, empty
@@ -500,7 +523,7 @@ def update_graphs_for_log(log_id):
 
     df = preprocess(df)
 
-    # Use FULL log (no case / event / date filters) for global insights
+    # Full log used intentionally
     return (
         event_frequency_bar(df),
         duration_distribution(df),
