@@ -103,7 +103,7 @@ FlowMetriQ satisfies the following core process mining requirements:
 
 ### Rework Loops (Internally Pending Events)
 
-Rework loops—such as repeated *internally pending* events—are a strong indicator of inefficiency.
+Rework loops, such as repeated *internally pending* events, are a strong indicator of inefficiency.
 
 <img width="1588" height="977" alt="Screenshot 2025-12-12 002104" src="https://github.com/user-attachments/assets/aaaf9bbc-d23a-46d8-92f9-f7629d7c57d6" />
 
@@ -280,7 +280,7 @@ PORT=8050
 SECRET_KEY=your_secret_here
 ```
 
-> `.env` is ignored by git — credentials are never uploaded.
+> `.env` is ignored by git, credentials are never uploaded.
 
 ---
 
@@ -336,7 +336,51 @@ Open your browser:
 http://localhost:PORT
 ```
 
+## Event Log Format
 
+FlowMetriQ expects event logs in CSV format with the following minimum columns:
+
+- `CASE_ID` — Unique identifier for each process instance
+- `ACTIVITY` — Name of the executed activity
+- `START TIME` — Timestamp when the activity started
+- `END TIME` — Timestamp when the activity ended
+
+Additional columns (e.g., resource, team, cost) are supported but optional.
+
+**Example:**
+
+| CASE_ID | ACTIVITY            | START TIME           | END TIME             |
+|--------:|---------------------|----------------------|----------------------|
+| 1001    | Submit Claim        | 2023-01-01 09:12:00  | 2023-01-01 09:15:00  |
+| 1001    | Internally Pending  | 2023-01-01 09:15:00  | 2023-01-03 14:22:00  |
+
+Timestamps are parsed using Pandas and must be in a valid datetime format.
+
+## Security & Privacy
+
+- All data is processed **locally**
+- No event logs are transmitted or stored externally
+- MongoDB runs on the user's local machine
+- Authentication is optional and intended for demonstration purposes only
+
+This design ensures sensitive operational or claims data never leaves the local environment.
+
+## Known Limitations
+
+- Designed for **educational and analytical use**, not production deployment
+- Large event logs may impact performance due to in-memory processing
+- Simulation results depend on historical behavior and assumptions
+- Markov routing does not capture long-term dependencies across cases
+
+These limitations are intentional and aligned with the project’s academic scope.
+
+## Future Improvements
+
+- Conformance checking against reference models
+- Resource-aware simulation
+- Cost-based performance metrics
+- Automated bottleneck recommendations
+- Variant comparison and clustering
 
 Support
 If you like this project, please ⭐ the repository!
