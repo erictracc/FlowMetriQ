@@ -221,38 +221,40 @@ This closes the loop between **diagnosis → intervention → evaluation**.
 
 ## Project Structure
 
+```
 FlowMetriQ/
-│ app.py
-│ README.md
-│ requirements.txt
-│ .env # local environment variables (ignored by git)
+├── app.py
+├── README.md
+├── requirements.txt
+├── .env                     # local environment variables (ignored by git)
 │
 ├── config/
-│ └── settings.json # safe version, no credentials
+│   └── settings.json        # safe version, no credentials
 │
 ├── components/
-│ └── navbar.py
+│   └── navbar.py
 │
 ├── db/
-│ ├── mongo.py
-│ ├── logs.py
-│ └── collections.py
+│   ├── mongo.py
+│   ├── logs.py
+│   └── collections.py
 │
 ├── pages/
-│ ├── home.py
-│ ├── analysis.py
-│ ├── simulation.py
-│ ├── prediction.py
-│ ├── login.py
-│ └── logout.py
+│   ├── home.py
+│   ├── analysis.py
+│   ├── simulation.py
+│   ├── prediction.py
+│   ├── login.py
+│   └── logout.py
 │
 └── services/
-├── log_service.py
-├── simulation_service.py
-├── bottleneck_service.py
-├── graph_service.py
-└── performance_service.py
+    ├── log_service.py
+    ├── simulation_service.py
+    ├── bottleneck_service.py
+    ├── graph_service.py
+    └── performance_service.py
 
+```
 ---
 
 ## Environment Setup (Safe Local Version)
@@ -308,8 +310,7 @@ Start MongoDB locally
 
 Run the application:
 
-bash
-Copy code
+
 python app.py
 Open your browser:
 
