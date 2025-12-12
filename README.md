@@ -272,12 +272,13 @@ FlowMetriQ/
 
 ### 1. Create a `.env` file
 
+```python
 MONGO_URI=mongodb://admin:YOURPASSWORD@localhost:27017/?authSource=admin
 MONGO_DB=flowmetriq
 HOST=127.0.0.1
 PORT=8050
 SECRET_KEY=your_secret_here
-
+```
 
 > `.env` is ignored by git — credentials are never uploaded.
 
