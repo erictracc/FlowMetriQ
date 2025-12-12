@@ -340,10 +340,10 @@ http://localhost:PORT
 
 FlowMetriQ expects event logs in CSV format with the following minimum columns:
 
-- `CASE_ID` — Unique identifier for each process instance
-- `ACTIVITY` — Name of the executed activity
-- `START TIME` — Timestamp when the activity started
-- `END TIME` — Timestamp when the activity ended
+- `CASE_ID` = Unique identifier for each process instance
+- `ACTIVITY` = Name of the executed activity
+- `START TIME` = Timestamp when the activity started
+- `END TIME` = Timestamp when the activity ended
 
 Additional columns (e.g., resource, team, cost) are supported but optional.
 
