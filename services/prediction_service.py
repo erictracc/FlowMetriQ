@@ -341,13 +341,20 @@ def build_prediction_models(df, test_size=0.20, random_state=42):
     }
 
 
-def predict_for_case(df: pd.DataFrame, models: dict, case_id: str, top_k: int = 3):
+def predict_for_case(
+    df: pd.DataFrame,
+    models: dict,
+    case_id: str,
+    top_k: int = 3,
+    stop_at_index: int | None = None,
+):
     """
     Predict next activity + remaining time for a given case using the trained models.
-    Uses ONLY:
-      - models["rf_next"]  (Random Forest next-activity)
-      - models["gbr_rem"]  (Gradient Boosting remaining time)
-      - models["le"]       (LabelEncoder for last_event)
+
+    NEW:
+    - stop_at_index allows prediction from a chosen event prefix
+      (e.g., predict as if the case stopped at event i)
+
     Returns dict:
       {
         "last_event": str or None,
@@ -376,7 +383,7 @@ def predict_for_case(df: pd.DataFrame, models: dict, case_id: str, top_k: int = 
     df["CASE ID"] = df["CASE ID"].astype(str)
     df = df.sort_values(["CASE ID", "START TIME"])
 
-    # Extract the case trace
+    # Extract case trace
     case_df = df[df["CASE ID"] == str(case_id)]
     if case_df.empty:
         return {
@@ -389,7 +396,18 @@ def predict_for_case(df: pd.DataFrame, models: dict, case_id: str, top_k: int = 
 
     case_df = case_df.sort_values("START TIME")
 
-    # If case has no events at all (should not happen, but keep safe)
+    # --------------------------------------------------
+    # 🔥 PREFIX TRUNCATION (THIS WAS MISSING)
+    # --------------------------------------------------
+    if stop_at_index is not None:
+        if stop_at_index < 1:
+            stop_at_index = 1
+        if stop_at_index > len(case_df):
+            stop_at_index = len(case_df)
+
+        case_df = case_df.iloc[:stop_at_index]
+
+    # Safety check
     if len(case_df) < 1:
         return {
             "last_event": None,
@@ -399,9 +417,12 @@ def predict_for_case(df: pd.DataFrame, models: dict, case_id: str, top_k: int = 
             "remaining_error": None,
         }
 
-    # Use last event for prediction
+    # --------------------------------------------------
+    # Feature construction (now prefix-aware)
+    # --------------------------------------------------
     last_event = case_df["EVENT"].iloc[-1]
     prefix_len = len(case_df)
+
     case_start = case_df["START TIME"].iloc[0]
     current_end = case_df["END TIME"].iloc[-1]
     elapsed = (current_end - case_start).total_seconds() / 60.0
@@ -410,15 +431,16 @@ def predict_for_case(df: pd.DataFrame, models: dict, case_id: str, top_k: int = 
     try:
         last_code = le.transform([last_event])[0]
     except ValueError:
-        # unseen class: fallback to 0
-        last_code = 0
+        last_code = 0  # unseen event fallback
 
     X_curr = pd.DataFrame(
         [[last_code, prefix_len, elapsed]],
         columns=["last_event_enc", "prefix_len", "elapsed"],
     )
 
-    # ---------------- NEXT EVENT PREDICTION (RF) ----------------
+    # --------------------------------------------------
+    # NEXT EVENT PREDICTION (Random Forest)
+    # --------------------------------------------------
     if hasattr(rf_next, "predict_proba"):
         proba = rf_next.predict_proba(X_curr)[0]
         top_idx = proba.argsort()[::-1][:top_k]
@@ -426,13 +448,16 @@ def predict_for_case(df: pd.DataFrame, models: dict, case_id: str, top_k: int = 
         probs = proba[top_idx]
 
         next_events = [
-            {"event": e, "prob": float(p)} for e, p in zip(events, probs)
+            {"event": str(e), "prob": float(p)}
+            for e, p in zip(events, probs)
         ]
     else:
         pred = rf_next.predict(X_curr)[0]
-        next_events = [{"event": pred, "prob": 1.0}]
+        next_events = [{"event": str(pred), "prob": 1.0}]
 
-    # ---------------- REMAINING TIME PREDICTION ----------------
+    # --------------------------------------------------
+    # REMAINING TIME PREDICTION
+    # --------------------------------------------------
     remaining_pred = float(
         gbr_rem.predict(X_curr[["prefix_len", "elapsed"]])[0]
     )

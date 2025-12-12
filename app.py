@@ -116,7 +116,7 @@ app.layout = serve_layout
 # ---------------------------------------------------------
 if __name__ == "__main__":
     app.run(
-        host=HOST,
+        host=HOST,   
         port=PORT,
         debug=True,
         use_reloader=False  # prevents double-execution and WinError 10038
