@@ -1,6 +1,7 @@
 <div align="center">
   <h1><b>FlowMetriQ</b></h1>
   <img src="https://readme-typing-svg.demolab.com?font=Poppins&size=26&pause=1000&color=7D53F7&center=true&width=450&lines=Process+Mining+Dashboard;Simulation+Engine;Performance+Analytics" alt="Typing animation" />
+<img width="1588" height="1201" alt="Screenshot 2025-12-12 000551" src="https://github.com/user-attachments/assets/38dca365-2be4-4933-9a3e-514c0df589db" />
 
 </div>
 
@@ -38,6 +39,7 @@ All data is stored **locally** using your MongoDB instance, nothing is cloud-hos
 - Event frequency graphs  
 - Bottleneck detection  
 
+<img width="1592" height="1187" alt="Screenshot 2025-12-12 000610" src="https://github.com/user-attachments/assets/a05d794c-412c-4a45-98bf-10192566dda5" />
 
 
 ### **Simulation Engine**
@@ -48,6 +50,7 @@ All data is stored **locally** using your MongoDB instance, nothing is cloud-hos
   - Speedup (%)  
   - Slowdown (%)  
 
+<img width="1582" height="1190" alt="Screenshot 2025-12-12 000854" src="https://github.com/user-attachments/assets/8efaebad-e7c5-4b12-9851-ea3e906a6a02" />
 
 
 ### **Interactive Dashboard**
@@ -56,6 +59,8 @@ All data is stored **locally** using your MongoDB instance, nothing is cloud-hos
 - `/home` → Overview page  
 - `/config` → Application settings  
 - `/login` / `/logout` → Optional authentication screens  
+
+<img width="1582" height="1187" alt="Screenshot 2025-12-12 001946" src="https://github.com/user-attachments/assets/8eb45f0c-4cf8-4502-8dd9-790653da3a7c" />
 
 
 ---
@@ -100,12 +105,15 @@ FlowMetriQ satisfies the following core process mining requirements:
 
 Rework loops—such as repeated *internally pending* events—are a strong indicator of inefficiency.
 
+<img width="1588" height="977" alt="Screenshot 2025-12-12 002104" src="https://github.com/user-attachments/assets/aaaf9bbc-d23a-46d8-92f9-f7629d7c57d6" />
+
 - On the **Analysis page**, filtering by the *internally pending* activity reveals:
   - High frequency
   - Elevated median and average durations
 - In **Additional Visual Insights**, this event has the **highest count**
 - Its **boxplot is highly skewed**, indicating long-tail delays
 
+<img width="1585" height="1192" alt="Screenshot 2025-12-12 000629" src="https://github.com/user-attachments/assets/a8878ff8-4392-4d02-8ff3-104f48abd313" />
 
 
 **Interpretation:**  
@@ -121,6 +129,9 @@ FlowMetriQ enables deep inspection of long-running cases:
 - This allows analysts to:
   - Select the longest case (by total duration or number of events)
   - Understand which activities contribute most to delays
+
+<img width="1582" height="1198" alt="Screenshot 2025-12-12 000710" src="https://github.com/user-attachments/assets/1781e4cd-5ecd-40f2-ba4b-c954f652edd7" />
+
 
 **Use Case:**  
 After identifying extreme cases through statistical analysis, those cases can be visually inspected to understand *why* they took longer.
