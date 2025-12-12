@@ -7,20 +7,22 @@
 
 ## 📌 Overview
 
-**FlowMetriQ** is a local, interactive **Process Mining & Simulation tool** built with:
+**FlowMetriQ** is a local, interactive **Process Mining & Simulation tool** designed to analyze, visualize, and experiment with real-world event logs.
+
+Built using:
 
 - **Python (Dash + Flask)**
 - **MongoDB**
 - **Plotly Graphs**
 - **Monte-Carlo Simulation Engine**
 
-It allows you to:
+It allows users to:
 
-✔ Upload event logs  
-✔ Explore bottlenecks and performance  
-✔ Visualize timelines and statistics  
+✔ Upload and manage event logs  
+✔ Explore bottlenecks and performance issues  
+✔ Visualize timelines and statistical distributions  
 ✔ Run simulations with activity duration interventions  
-✔ Compare original vs simulated outcomes  
+✔ Compare baseline vs simulated process outcomes  
 
 All data is stored **locally** using your MongoDB instance — nothing is cloud-hosted.
 
@@ -31,24 +33,165 @@ All data is stored **locally** using your MongoDB instance — nothing is cloud-
 ### 🔍 **Process Analysis**
 - Activity performance tables  
 - Case timelines  
-- Duration distributions  
+- Duration distributions and boxplots  
 - Event frequency graphs  
-- Bottleneck analysis  
+- Bottleneck detection  
 
 ### 🧪 **Simulation Engine**
 - Markov-based path generation  
 - Monte-Carlo simulation runs  
-- Interventions:
+- Activity interventions:
   - Deterministic durations  
-  - Speedup %  
-  - Slowdown %  
+  - Speedup (%)  
+  - Slowdown (%)  
 
-### **Interactive Dashboard**
+### 📊 **Interactive Dashboard**
 - `/analysis` → Performance analytics  
-- `/simulation` → Run your simulations  
+- `/simulation` → Scenario-based simulations  
 - `/home` → Overview page  
-- `/config` → Settings  
-- `/login/logout` → (optional) auth screens
+- `/config` → Application settings  
+- `/login` / `/logout` → Optional authentication screens  
+
+---
+
+## 🔎 Process Analysis & Insights
+
+FlowMetriQ is designed not only to visualize event logs, but to **support structured process analysis and decision-making**. Using the application, analysts can systematically uncover inefficiencies and formulate actionable recommendations.
+
+### What the Application Enables
+
+Using FlowMetriQ, we can:
+
+- Visualize the **end-to-end claim-handling process**
+- Identify:
+  - Bottlenecks
+  - Delays
+  - Rework loops
+  - Repetitions
+- Inspect individual cases in detail
+- Validate data quality issues
+- Make **evidence-based process improvement recommendations**
+
+---
+
+## ✅ Application Core Requirements Checklist
+
+FlowMetriQ satisfies the following core process mining requirements:
+
+- ✔ Directly-Follows Graph (DFG) generation  
+- ✔ Interactive visualizations  
+- ✔ Case viewer with filters  
+- ✔ Bottleneck detection  
+- ✔ Basic statistics dashboard  
+- ✔ Case timelines  
+- ✔ Duration distributions and boxplots  
+
+---
+
+## 🧠 Demonstrated Process Insights
+
+### 🔁 Rework Loops (Internally Pending Events)
+
+Rework loops—such as repeated *internally pending* events—are a strong indicator of inefficiency.
+
+- On the **Analysis page**, filtering by the *internally pending* activity reveals:
+  - High frequency
+  - Elevated median and average durations
+- In **Additional Visual Insights**, this event has the **highest count**
+- Its **boxplot is highly skewed**, indicating long-tail delays
+
+📌 **Interpretation:**  
+This suggests repeated internal handoffs or unresolved dependencies, making it a prime candidate for process redesign.
+
+---
+
+### ⏱️ Longest Cases
+
+FlowMetriQ enables deep inspection of long-running cases:
+
+- The **Case Timeline feature** visualizes how each activity unfolds over time
+- This allows analysts to:
+  - Select the longest case (by total duration or number of events)
+  - Understand which activities contribute most to delays
+
+📌 **Use Case:**  
+After identifying extreme cases through statistical analysis, those cases can be visually inspected to understand *why* they took longer.
+
+---
+
+### 🕒 Timestamp Anomalies & Ordering Issues
+
+In **Additional Visual Insights**, users can inspect:
+
+- Event frequencies
+- Direct successorship relationships
+
+This helps identify:
+- Unexpected activity ordering
+- Timestamp inconsistencies
+- Potential logging or automation artifacts
+
+📌 **Example:**  
+If an approval event consistently precedes data collection, this may indicate data recording issues.
+
+---
+
+### ⚠️ Negative Durations
+
+Some activities initially appeared with **negative durations**.
+
+**Handling decision:**
+- Negative durations were treated as **data entry or logging errors**
+- These records were removed from the analysis
+
+**Implications:**
+- Certain variants may no longer be representable
+- Artificial variants could appear or disappear
+
+📌 **Alternative approaches considered:**
+- Converting negative values to positive
+- Consulting stakeholders to interpret their semantic meaning
+
+---
+
+### 📊 Activities with Very Few Duration Values
+
+Some activities appear only once or a handful of times, resulting in unusual boxplots.
+
+**Observed effects:**
+- No visible box (Q1 = median = Q3)
+- Single dots or flat lines
+- Sparse distributions
+
+**Examples:**
+- Paid  
+- Review Completed  
+- Reviewed Documentation  
+
+**Why this happens:**
+- Rare event types  
+- Automated activities (often duration = 0)  
+- Activities occurring in very few cases  
+
+📌 **Important Note:**  
+Boxplots require **multiple observations** to display meaningful quartiles. Sparse activities should be interpreted cautiously.
+
+---
+
+## 🧪 From Analysis to Simulation
+
+Insights discovered during analysis directly inform the **Simulation Engine**:
+
+- Bottleneck activities can be targeted for:
+  - Deterministic duration changes
+  - Speedups
+  - Slowdowns
+- Simulation results quantify:
+  - Expected improvement
+  - Distributional changes
+  - Risk of unintended delays
+
+This closes the loop between **diagnosis → intervention → evaluation**.
 
 ---
 
@@ -68,7 +211,7 @@ All data is stored **locally** using your MongoDB instance — nothing is cloud-
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
 FlowMetriQ/
 │ app.py
@@ -77,7 +220,7 @@ FlowMetriQ/
 │ .env # local environment variables (ignored by git)
 │
 ├── config/
-│ └── settings.json (safe version, no credentials)
+│ └── settings.json # safe version, no credentials
 │
 ├── components/
 │ └── navbar.py
@@ -107,9 +250,9 @@ Copy code
 
 ---
 
-## Environment Setup (Safe Local Version)
+## ⚙️ Environment Setup (Safe Local Version)
 
-1. Create a `.env` file in the root folder:
+### 1. Create a `.env` file
 
 MONGO_URI=mongodb://admin:YOURPASSWORD@localhost:27017/?authSource=admin
 MONGO_DB=flowmetriq
@@ -120,9 +263,11 @@ SECRET_KEY=your_secret_here
 lua
 Copy code
 
-> `.env` is ignored by git — so your real credentials never get uploaded.
+> `.env` is ignored by git — credentials are never uploaded.
 
-2. Update `config_manager` to read from environment variables:
+---
+
+### 2. Configuration Loader Example
 
 ```python
 from dotenv import load_dotenv
@@ -137,53 +282,47 @@ settings = {
     "port": int(os.getenv("PORT", 8050)),
     "secret_key": os.getenv("SECRET_KEY"),
 }
-🧑Running Locally
-1. Clone the project
+🧑‍💻 Running Locally
+Clone the repository:
+
 bash
 Copy code
 git clone https://github.com/erictracc/FlowMetriQ.git
 cd FlowMetriQ
-2. Create a virtual environment
+Create a virtual environment:
+
 bash
 Copy code
 python -m venv venv
 .\venv\Scripts\activate   # Windows
-3. Install dependencies
+Install dependencies:
+
 bash
 Copy code
 pip install -r requirements.txt
-4. Start MongoDB locally
+Start MongoDB locally
 (Make sure MongoDB is running before launching FlowMetriQ.)
 
-5. Run the dashboard
+Run the application:
+
+bash
+Copy code
 python app.py
-6. Open browser
+Open your browser:
+
+arduino
 Copy code
 http://localhost:PORT
-Simulation Overview
-FlowMetriQ allows you to test how process durations change under:
-
-Deterministic adjustments
-
-Speedups (%)
-
-Slowdowns (%)
-
-Results appear in:
-
-Simulation summary
-
-Histogram comparison
-
-Case duration changes
-
 📸 Screenshots (Add Later)
-css
-Copy code
-[ Home Page ]
-[ Analysis Dashboard ]
-[ Simulation Engine ]
+Home Page
+
+Analysis Dashboard
+
+Simulation Engine
+
+Login Page (for safety)
+
 ⭐ Support
-If you like this project, please ⭐ the repo!
+If you like this project, please ⭐ the repository!
 
 <div align="center"> Made locally with ❤️ by <b>Eric Traccitto</b> </div> ```
