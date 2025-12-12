@@ -25,7 +25,7 @@ It allows users to:
 ✔ Run simulations with activity duration interventions  
 ✔ Compare baseline vs simulated process outcomes  
 
-All data is stored **locally** using your MongoDB instance — nothing is cloud-hosted.
+All data is stored **locally** using your MongoDB instance, nothing is cloud-hosted.
 
 ---
 
