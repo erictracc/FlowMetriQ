@@ -1,11 +1,12 @@
 <div align="center">
   <h1><b>FlowMetriQ</b></h1>
   <img src="https://readme-typing-svg.demolab.com?font=Poppins&size=26&pause=1000&color=7D53F7&center=true&width=450&lines=Process+Mining+Dashboard;Simulation+Engine;Performance+Analytics" alt="Typing animation" />
+
 </div>
 
 ---
 
-## 📌 Overview
+## Overview
 
 **FlowMetriQ** is a local, interactive **Process Mining & Simulation tool** designed to analyze, visualize, and experiment with real-world event logs.
 
@@ -18,7 +19,7 @@ Built using:
 
 It allows users to:
 
-✔ Upload and manage event logs  
+✔ Upload and manage event logs in a specific structure
 ✔ Explore bottlenecks and performance issues  
 ✔ Visualize timelines and statistical distributions  
 ✔ Run simulations with activity duration interventions  
@@ -28,16 +29,18 @@ All data is stored **locally** using your MongoDB instance — nothing is cloud-
 
 ---
 
-## 🚀 Features
+## Features
 
-### 🔍 **Process Analysis**
+### **Process Analysis**
 - Activity performance tables  
 - Case timelines  
 - Duration distributions and boxplots  
 - Event frequency graphs  
 - Bottleneck detection  
 
-### 🧪 **Simulation Engine**
+
+
+### **Simulation Engine**
 - Markov-based path generation  
 - Monte-Carlo simulation runs  
 - Activity interventions:
@@ -45,16 +48,19 @@ All data is stored **locally** using your MongoDB instance — nothing is cloud-
   - Speedup (%)  
   - Slowdown (%)  
 
-### 📊 **Interactive Dashboard**
+
+
+### **Interactive Dashboard**
 - `/analysis` → Performance analytics  
 - `/simulation` → Scenario-based simulations  
 - `/home` → Overview page  
 - `/config` → Application settings  
 - `/login` / `/logout` → Optional authentication screens  
 
+
 ---
 
-## 🔎 Process Analysis & Insights
+## Process Analysis & Insights
 
 FlowMetriQ is designed not only to visualize event logs, but to **support structured process analysis and decision-making**. Using the application, analysts can systematically uncover inefficiencies and formulate actionable recommendations.
 
@@ -74,7 +80,7 @@ Using FlowMetriQ, we can:
 
 ---
 
-## ✅ Application Core Requirements Checklist
+## Application Core Requirements Checklist
 
 FlowMetriQ satisfies the following core process mining requirements:
 
@@ -88,9 +94,9 @@ FlowMetriQ satisfies the following core process mining requirements:
 
 ---
 
-## 🧠 Demonstrated Process Insights
+## Demonstrated Process Insights
 
-### 🔁 Rework Loops (Internally Pending Events)
+### Rework Loops (Internally Pending Events)
 
 Rework loops—such as repeated *internally pending* events—are a strong indicator of inefficiency.
 
@@ -100,12 +106,14 @@ Rework loops—such as repeated *internally pending* events—are a strong indic
 - In **Additional Visual Insights**, this event has the **highest count**
 - Its **boxplot is highly skewed**, indicating long-tail delays
 
-📌 **Interpretation:**  
+
+
+**Interpretation:**  
 This suggests repeated internal handoffs or unresolved dependencies, making it a prime candidate for process redesign.
 
 ---
 
-### ⏱️ Longest Cases
+### Longest Cases
 
 FlowMetriQ enables deep inspection of long-running cases:
 
@@ -114,12 +122,12 @@ FlowMetriQ enables deep inspection of long-running cases:
   - Select the longest case (by total duration or number of events)
   - Understand which activities contribute most to delays
 
-📌 **Use Case:**  
+**Use Case:**  
 After identifying extreme cases through statistical analysis, those cases can be visually inspected to understand *why* they took longer.
 
 ---
 
-### 🕒 Timestamp Anomalies & Ordering Issues
+### Timestamp Anomalies & Ordering Issues
 
 In **Additional Visual Insights**, users can inspect:
 
@@ -131,12 +139,12 @@ This helps identify:
 - Timestamp inconsistencies
 - Potential logging or automation artifacts
 
-📌 **Example:**  
+**Example:**  
 If an approval event consistently precedes data collection, this may indicate data recording issues.
 
 ---
 
-### ⚠️ Negative Durations
+### Negative Durations
 
 Some activities initially appeared with **negative durations**.
 
@@ -148,13 +156,13 @@ Some activities initially appeared with **negative durations**.
 - Certain variants may no longer be representable
 - Artificial variants could appear or disappear
 
-📌 **Alternative approaches considered:**
+**Alternative approaches considered:**
 - Converting negative values to positive
 - Consulting stakeholders to interpret their semantic meaning
 
 ---
 
-### 📊 Activities with Very Few Duration Values
+### Activities with Very Few Duration Values
 
 Some activities appear only once or a handful of times, resulting in unusual boxplots.
 
@@ -173,12 +181,12 @@ Some activities appear only once or a handful of times, resulting in unusual box
 - Automated activities (often duration = 0)  
 - Activities occurring in very few cases  
 
-📌 **Important Note:**  
+**Important Note:**  
 Boxplots require **multiple observations** to display meaningful quartiles. Sparse activities should be interpreted cautiously.
 
 ---
 
-## 🧪 From Analysis to Simulation
+## From Analysis to Simulation
 
 Insights discovered during analysis directly inform the **Simulation Engine**:
 
@@ -195,7 +203,7 @@ This closes the loop between **diagnosis → intervention → evaluation**.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 **Backend:**  
 - Python 3.10+  
@@ -211,7 +219,7 @@ This closes the loop between **diagnosis → intervention → evaluation**.
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 FlowMetriQ/
 │ app.py
@@ -245,12 +253,9 @@ FlowMetriQ/
 ├── graph_service.py
 └── performance_service.py
 
-yaml
-Copy code
-
 ---
 
-## ⚙️ Environment Setup (Safe Local Version)
+## Environment Setup (Safe Local Version)
 
 ### 1. Create a `.env` file
 
@@ -260,8 +265,6 @@ HOST=127.0.0.1
 PORT=8050
 SECRET_KEY=your_secret_here
 
-lua
-Copy code
 
 > `.env` is ignored by git — credentials are never uploaded.
 
@@ -310,19 +313,12 @@ Copy code
 python app.py
 Open your browser:
 
-arduino
-Copy code
 http://localhost:PORT
-📸 Screenshots (Add Later)
-Home Page
 
-Analysis Dashboard
 
-Simulation Engine
 
-Login Page (for safety)
 
-⭐ Support
+Support
 If you like this project, please ⭐ the repository!
 
 <div align="center"> Made locally with ❤️ by <b>Eric Traccitto</b> </div> ```
