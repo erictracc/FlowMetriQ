@@ -19,7 +19,7 @@ Built using:
 
 It allows users to:
 
-✔ Upload and manage event logs in a specific structure
+✔ Upload and manage event logs
 ✔ Explore bottlenecks and performance issues  
 ✔ Visualize timelines and statistical distributions  
 ✔ Run simulations with activity duration interventions  
